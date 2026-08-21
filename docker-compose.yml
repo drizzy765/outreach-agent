@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: outreach_crm_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: outreach_user
+      POSTGRES_PASSWORD: outreach_password
+      POSTGRES_DB: outreach_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  pgdata:
