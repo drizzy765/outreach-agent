@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
-from typing import Optional
+from typing import Optional, List
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -9,12 +9,26 @@ class Settings(BaseSettings):
     database_url: str = Field(default="postgresql+asyncpg://outreach_user:outreach_password@localhost:5432/outreach_crm")
     database_sync_url: str = Field(default="postgresql://outreach_user:outreach_password@localhost:5432/outreach_crm")
 
-    # LLM Settings
+    # Free-Tier & Multi-Model LLM Providers
+    openrouter_api_key: Optional[str] = None
+    nvidia_api_key: Optional[str] = None
+    groq_api_key: Optional[str] = None
+    google_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    ollama_base_url: str = "http://localhost:11434/v1"
+    custom_llm_base_url: Optional[str] = None
+    custom_llm_api_key: Optional[str] = None
+
+    # Legacy / Commercial Keys (Optional fallbacks)
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
-    google_api_key: Optional[str] = None
-    default_llm_provider: str = "openai"
-    default_model: str = "gpt-4o"
+
+    # Routing preferences
+    default_llm_provider: str = "openrouter"
+    default_free_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+    default_groq_model: str = "llama-3.3-70b-versatile"
+    default_nvidia_model: str = "meta/llama-3.3-70b-instruct"
+    default_gemini_model: str = "gemini-2.0-flash"
 
     # Telegram Bot
     telegram_bot_token: Optional[str] = None

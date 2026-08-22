@@ -9,6 +9,7 @@ from tools.email_verifier import EmailVerifier, generate_email_permutations
 from agents.discovery import ProspectDiscoveryAgent
 from agents.audit import TechnicalAuditAgent
 from agents.enrichment import LeadEnrichmentAgent
+from agents.pitcher import ValueAddPitcherAgent
 from agents.negotiation import NegotiationEngineAgent
 
 app = typer.Typer(help="Autonomous Multi-Agent Outreach Engine CLI")
@@ -191,8 +192,41 @@ def enrich(
 
     console.print(table)
 
+@app.command()
+def pitch(
+    url: str = typer.Option(..., "--url", "-u", help="Target company website URL"),
+    name: str = typer.Option(..., "--name", "-n", help="Target company name"),
+    lead: str = typer.Option("Founder", "--lead", "-l", help="Lead name (e.g. Alex Mercer)"),
+    role: str = typer.Option("CTO", "--role", help="Lead role title (e.g. CTO)"),
+    angle: str = typer.Option(None, "--angle", "-a", help="Pitch angle: CUSTOM_ML_AUDIT or QUANTVAULT_DEMO")
+):
+    """Generate hyper-personalized value-add pitch and tailored architecture blueprint."""
+    console.print(Panel(f"✍️ Generating AI Pitch for [bold cyan]{name}[/bold cyan] ({url})", style="bold yellow"))
+    
+    # 1. Quick diagnostic
+    audit_agent = TechnicalAuditAgent(enable_playwright=False)
+    findings = asyncio.run(audit_agent.perform_audit(url))
+
+    # 2. Pitch generation via Free-Tier LLM Router
+    pitcher = ValueAddPitcherAgent()
+    draft = asyncio.run(pitcher.generate_pitch_async(
+        lead_name=lead,
+        lead_role=role,
+        company_name=name,
+        website_url=url,
+        audit_findings=findings,
+        pitch_angle=angle
+    ))
+
+    console.print(f"\n[bold green]Model / Provider Used:[/bold green] [cyan]{draft.get('provider_used')}[/cyan]")
+    console.print(f"[bold green]Pitch Angle:[/bold green] [yellow]{draft.get('pitch_type')}[/yellow]")
+    console.print(f"[bold green]Subject Line:[/bold green] [bold white]{draft.get('subject')}[/bold white]\n")
+
+    console.print(Panel(draft.get("body", ""), title="Drafted Outreach Body", style="green"))
+
 if __name__ == "__main__":
     app()
+
 
 
 

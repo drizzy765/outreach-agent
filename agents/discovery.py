@@ -58,7 +58,11 @@ class ProspectDiscoveryAgent:
             async with httpx.AsyncClient(headers=self.headers, timeout=self.timeout, follow_redirects=True) as client:
                 resp = await client.get("https://www.producthunt.com/feed")
                 if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.content, "html.parser")
+                    import warnings
+                    from bs4 import XMLParsedAsHTMLWarning
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+                        soup = BeautifulSoup(resp.content, "html.parser")
                     for entry in soup.find_all("entry")[:limit]:
                         title = entry.find("title").text if entry.find("title") else ""
                         link = entry.find("link")["href"] if entry.find("link") else ""

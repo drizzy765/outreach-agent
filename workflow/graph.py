@@ -87,7 +87,7 @@ async def node_lead_enrichment(state: OutreachState) -> Dict[str, Any]:
 
 async def node_pitch_generator(state: OutreachState) -> Dict[str, Any]:
     """Node 4: Value-Add Pitch Generation"""
-    pitch = pitcher_agent.generate_pitch(
+    pitch = await pitcher_agent.generate_pitch_async(
         lead_name=state.get("primary_lead_name", "Founder"),
         lead_role=state.get("primary_lead_role", "Founder"),
         company_name=state.get("company_name", "Company"),

@@ -9,7 +9,7 @@ This document provides a comprehensive, phased execution plan for the **Autonomo
 - [x] **Phase 1: Multi-Source Prospect Discovery & Ingestion Engine**
 - [x] **Phase 2: Deep Headless Audit & Visual Diagnostics (Playwright & SPA Scraper)**
 - [x] **Phase 3: Lead Enrichment & Deliverability Verification (OSINT & SMTP)**
-- [ ] **Phase 4: Dynamic Multi-LLM Value Pitch & Blueprint Generator**
+- [x] **Phase 4: Dynamic Multi-LLM Value Pitch & Blueprint Generator**
 - [ ] **Phase 5: Inbound/Outbound Email Pipeline & Bounded Negotiation Engine**
 - [ ] **Phase 6: Two-Way Telegram HITL Bot, CRM Celebration & Background Scheduler**
 
@@ -91,21 +91,21 @@ Enhance email discovery and verification with deep DOM crawling, permutation gen
 ## ✍️ Phase 4: Dynamic Multi-LLM Value Pitch & Blueprint Generator
 
 ### Objective
-Replace static f-string templates with dynamic LLM generation (OpenAI GPT-4o, Anthropic Claude 3.5 Sonnet, Google Gemini 1.5 Pro) to produce bespoke, diagnostic-driven pitch drafts and customized architecture blueprints.
+Replace static f-string templates with dynamic multi-provider free-tier LLMs (OpenRouter, Groq, NVIDIA NIM, Google Gemini, Ollama) and zero-token deterministic synthesizer fallbacks to produce bespoke, diagnostic-driven pitch drafts and customized architecture blueprints.
 
 ### Tasks
-- [ ] **4.1 Multi-Model LLM Client Integration (`agents/pitcher.py`)**
-  - Implement unified LLM interface supporting OpenAI, Anthropic, and Google Gemini via `config.py`.
-- [ ] **4.2 Context-Aware Pitch Prompt Engineering**
-  - Inject company diagnostic context: TTFB latency, search gaps, missing AI voice/telemetry workflows, detected tech stack.
+- [x] **4.1 Multi-Model Free-Tier LLM Client Router (`tools/llm_router.py` & `agents/pitcher.py`)**
+  - Implement unified LLM interface cascading across OpenRouter (free models), Groq, NVIDIA NIM, Google Gemini, and local Ollama.
+- [x] **4.2 Context-Aware Pitch Prompt Engineering**
+  - Inject company diagnostic context: TTFB latency, load time, search gaps, missing AI voice/telemetry workflows, and detected tech stack.
   - Enforce concise, value-first tone (under 150 words) with zero fluff or generic sales jargon.
-- [ ] **4.3 Dynamic Blueprint & Code Snippet Generator**
+- [x] **4.3 Dynamic Blueprint & Code Snippet Generator**
   - Angle A: Generates custom FastAPI + Qdrant microservice architecture tailored to the prospect's tech stack.
   - Angle B: Generates QuantVault real-time voice & telemetry workflow demo link and metric highlights.
-- [ ] **4.4 Pydantic Structured Output Validation**
-  - Enforce JSON structured output for subject line, email body, pitch angle, and primary call-to-action (CTA).
-- [ ] **4.5 Phase 4 Unit & Integration Tests**
-  - Add `tests/test_pitcher.py` mocking LLM responses and validating schema structure.
+- [x] **4.4 Structured JSON Output & Resilient Fallback**
+  - Extracts JSON structured output for subject line, email body, pitch angle, and blueprint snippet with zero-token offline synthesizer fallback.
+- [x] **4.5 Phase 4 Unit & Integration Tests**
+  - Add `tests/test_pitcher.py` covering mock OpenRouter responses, offline synthesizer, and synchronous/asynchronous invocations.
 
 ---
 
