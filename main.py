@@ -7,6 +7,7 @@ from database.connection import init_db
 from workflow.graph import run_autonomous_outreach_pipeline
 from tools.email_verifier import EmailVerifier, generate_email_permutations
 from agents.discovery import ProspectDiscoveryAgent
+from agents.audit import TechnicalAuditAgent
 from agents.negotiation import NegotiationEngineAgent
 
 app = typer.Typer(help="Autonomous Multi-Agent Outreach Engine CLI")
@@ -127,6 +128,37 @@ def discover(
 
     console.print(table)
 
+@app.command()
+def audit(
+    url: str = typer.Option(..., "--url", "-u", help="Target website URL to run diagnostics on"),
+    playwright: bool = typer.Option(True, "--playwright/--no-playwright", help="Enable Playwright deep headless inspection")
+):
+    """Run non-invasive technical audit and gap analysis on a target company."""
+    console.print(Panel(f"🔬 Running Technical & Performance Audit on [bold cyan]{url}[/bold cyan]", style="bold blue"))
+    agent = TechnicalAuditAgent(enable_playwright=playwright)
+    findings = asyncio.run(agent.perform_audit(url))
+
+    table = Table(title=f"Diagnostic Findings for {url}", show_header=True, header_style="bold magenta")
+    table.add_column("Metric / Check", style="cyan")
+    table.add_column("Value / Status", style="green")
+
+    table.add_row("Diagnostic Engine", findings.get("diagnostic_engine", "N/A"))
+    table.add_row("HTTP Status Code", str(findings.get("status_code", 200)))
+    table.add_row("Load Time / TTFB", f"{findings.get('load_time_ms', 0)}ms / {findings.get('ttfb_ms', 0)}ms")
+    table.add_row("Page Weight", f"{findings.get('page_weight_kb', 0)} KB")
+    table.add_row("Vector Search Gap Detected", str(findings.get("search_gap_detected", False)))
+    table.add_row("Search Diagnosis", findings.get("search_diagnosis", ""))
+    table.add_row("AI Voice/Copilot Gap Detected", str(findings.get("ai_agent_gap_detected", False)))
+    table.add_row("AI Diagnosis", findings.get("ai_agent_diagnosis", ""))
+    table.add_row("JS Console Errors", str(len(findings.get("js_console_errors", []))))
+    table.add_row("Detected APIs", ", ".join(findings.get("detected_apis", [])) or "None detected")
+    table.add_row("Recommended Pitch Angle", findings.get("recommended_pitch_angle", "CUSTOM_ML_AUDIT"), style="bold yellow")
+
+    console.print(table)
+    console.print("\n[bold cyan]Audit Summary:[/bold cyan]")
+    console.print(Panel(findings.get("audit_summary", "No summary generated."), style="dim"))
+
 if __name__ == "__main__":
     app()
+
 
