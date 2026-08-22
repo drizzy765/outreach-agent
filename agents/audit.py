@@ -57,7 +57,7 @@ class TechnicalAuditAgent:
                 soup = BeautifulSoup(response.text, "html.parser")
 
                 # Inspect Search Capabilities
-                search_inputs = soup.find_all("input", attrs={"type": re_compile_type}) if (re_compile_type := None) else soup.find_all(["input", "form"])
+                search_inputs = soup.find_all(["input", "form"])
                 has_semantic_search = any(term in html for term in ["semantic search", "vector search", "pinecone", "weaviate", "qdrant", "chroma", "embeddings", "rag"])
                 
                 if not has_semantic_search:

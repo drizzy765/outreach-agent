@@ -43,3 +43,8 @@ dev = [
 
 [project.scripts]
 outreach = "main:app"
+
+[tool.pytest.ini_options]
+cache_dir = "/tmp/.pytest_cache"
+asyncio_mode = "auto"
+

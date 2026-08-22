@@ -77,7 +77,56 @@ def verify_email(
         res = verifier.verify(p)
         table.add_row(res["email"], res["status"], str(res.get("details", "")))
 
+@app.command()
+def discover(
+    source: str = typer.Option("all", "--source", "-s", help="Source to scrape: all, producthunt, hackernews, ycombinator, github"),
+    limit: int = typer.Option(5, "--limit", "-l", help="Number of prospects to fetch per source"),
+    register: bool = typer.Option(False, "--register", "-r", help="Save discovered prospects directly into PostgreSQL CRM")
+):
+    """Discover new startups and SaaS platforms across multiple channels."""
+    console.print(f"[bold cyan]🔍 Discovering prospects from: [magenta]{source}[/magenta] (Limit: {limit})...[/bold cyan]")
+    agent = ProspectDiscoveryAgent()
+
+    async def _run_discovery():
+        if source == "all":
+            results = await agent.discover_multi_source(limit_per_source=limit)
+        elif source == "producthunt":
+            results = await agent.discover_from_producthunt_rss(limit=limit)
+        elif source == "hackernews":
+            results = await agent.discover_from_hackernews(limit=limit)
+        elif source == "ycombinator":
+            results = await agent.discover_from_ycombinator(limit=limit)
+        elif source == "github":
+            results = await agent.discover_from_github(limit=limit)
+        else:
+            console.print(f"[red]Unknown source: {source}[/red]")
+            return []
+
+        if register and results:
+            await init_db()
+            saved = await agent.register_prospects(results)
+            console.print(f"[green]✓ Successfully registered {len(saved)} companies to PostgreSQL CRM.[/green]")
+
+        return results
+
+    prospects = asyncio.run(_run_discovery())
+
+    table = Table(title="Discovered Prospects", show_header=True, header_style="bold green")
+    table.add_column("Company", style="bold cyan")
+    table.add_column("Source", style="yellow")
+    table.add_column("Website URL", style="blue")
+    table.add_column("Industry / Focus", style="dim")
+
+    for p in prospects:
+        table.add_row(
+            p.get("company_name", "Unknown"),
+            p.get("source", "feed"),
+            p.get("website_url", ""),
+            p.get("industry", "")[:40]
+        )
+
     console.print(table)
 
 if __name__ == "__main__":
     app()
+

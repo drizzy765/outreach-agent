@@ -31,17 +31,17 @@ class NegotiationEngineAgent:
         percent_match = re.search(r'(\d+)\s*%\s*(?:discount|off|lower)', text)
         discount_percent = float(percent_match.group(1)) if percent_match else 0.0
 
-        # Classify Intent
-        if any(w in text for w in ["deal", "let's do it", "sounds good", "ready to move forward", "send invoice", "sign", "send contract"]):
-            intent = "ACCEPTANCE"
-        elif any(w in text for w in ["nda", "master service agreement", "msa", "custom contract", "indemnity", "legal team", "terms of service"]):
+        # Classify Intent (Priority: Legal/Scope boundaries -> Opt-out -> Price -> Acceptance -> Tech)
+        if any(w in text for w in ["nda", "master service agreement", "msa", "custom contract", "indemnity", "legal team", "terms of service"]):
             intent = "CUSTOM_CONTRACT_REQUEST"
         elif any(w in text for w in ["mobile app", "full rewrite", "unrelated", "can you also build", "completely different"]):
             intent = "SCOPE_EXPANSION"
-        elif proposed_amount > 0 or discount_percent > 0 or any(w in text for w in ["discount", "expensive", "cheaper", "budget", "rate", "price"]):
-            intent = "PRICE_NEGOTIATION"
         elif any(w in text for w in ["unsubscribe", "not interested", "stop", "remove me"]):
             intent = "UNSUBSCRIBE"
+        elif proposed_amount > 0 or discount_percent > 0 or any(w in text for w in ["discount", "expensive", "cheaper", "budget", "rate", "price"]):
+            intent = "PRICE_NEGOTIATION"
+        elif any(w in text for w in ["deal", "let's do it", "sounds good", "ready to move forward", "send invoice", "send contract", "ready to sign", "sign the agreement"]):
+            intent = "ACCEPTANCE"
         else:
             intent = "TECHNICAL_QUESTION"
 
