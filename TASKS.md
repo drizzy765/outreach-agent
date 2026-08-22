@@ -10,7 +10,7 @@ This document provides a comprehensive, phased execution plan for the **Autonomo
 - [x] **Phase 2: Deep Headless Audit & Visual Diagnostics (Playwright & SPA Scraper)**
 - [x] **Phase 3: Lead Enrichment & Deliverability Verification (OSINT & SMTP)**
 - [x] **Phase 4: Dynamic Multi-LLM Value Pitch & Blueprint Generator**
-- [ ] **Phase 5: Inbound/Outbound Email Pipeline & Bounded Negotiation Engine**
+- [x] **Phase 5: Inbound/Outbound Email Pipeline & Bounded Negotiation Engine**
 - [ ] **Phase 6: Two-Way Telegram HITL Bot, CRM Celebration & Background Scheduler**
 
 ---
@@ -115,22 +115,22 @@ Replace static f-string templates with dynamic multi-provider free-tier LLMs (Op
 Implement full email delivery with warmup guardrails, background inbound IMAP monitoring, and deterministic negotiation state machines with strict rate floors.
 
 ### Tasks
-- [ ] **5.1 Outbound SMTP Transmission Engine (`tools/email_sender.py`)**
+- [x] **5.1 Outbound SMTP Transmission Engine (`tools/email_sender.py`)**
   - Send authenticated SMTP emails via secondary lookalike domain (`outbound_secondary_domain`).
   - Implement warmup rate limiting (15–25 emails/day max) with randomized jitter delays (180s–600s).
-  - Log sent messages in `email_send_logs` table.
-- [ ] **5.2 Inbound IMAP Email Listener (`tools/imap_listener.py`)**
-  - Async worker polling IMAP mailbox for new replies.
+  - Log sent messages in `email_send_logs` table with zero-credential dry-run mode.
+- [x] **5.2 Inbound IMAP Email Listener (`tools/imap_listener.py`)**
+  - Async worker polling IMAP mailbox for new replies with mock reply injection testing.
   - Extract email threads, match `In-Reply-To` / `References` headers with `email_thread_id` in CRM.
-- [ ] **5.3 Intelligent Intent Classification & LLM Negotiation (`agents/negotiation.py`)**
-  - LLM-assisted intent classification: `ACCEPTANCE`, `PRICE_NEGOTIATION`, `CUSTOM_CONTRACT_REQUEST`, `SCOPE_EXPANSION`, `TECHNICAL_QUESTION`, `UNSUBSCRIBE`.
-- [ ] **5.4 Deterministic Guardrails Enforcement**
+- [x] **5.3 Intelligent Intent Classification & LLM Negotiation (`agents/negotiation.py`)**
+  - Word-boundary regex & free-tier LLM intent classification (`ACCEPTANCE`, `PRICE_NEGOTIATION`, `CUSTOM_CONTRACT_REQUEST`, `SCOPE_EXPANSION`, `TECHNICAL_QUESTION`, `UNSUBSCRIBE`).
+- [x] **5.4 Deterministic Guardrails Enforcement**
   - Rate floor ($150/hr or $5,000 fixed project).
   - Max discount ceiling (10%).
   - Milestone terms (50% upfront, 50% upon completion).
   - Automatic escalation to `HITL_HANDOVER` when bounds are breached.
-- [ ] **5.5 Phase 5 Unit & Integration Tests**
-  - Maintain & expand `tests/test_negotiation.py` with multi-turn negotiation fixtures.
+- [x] **5.5 Phase 5 Unit & Integration Tests**
+  - Maintain & expand `tests/test_negotiation.py` and `tests/test_email_sender.py` with multi-turn negotiation and SMTP/IMAP fixtures.
 
 ---
 

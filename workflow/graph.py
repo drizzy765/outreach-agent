@@ -128,7 +128,7 @@ async def node_negotiation_handler(state: OutreachState) -> Dict[str, Any]:
             "human_override_required": False
         }
 
-    outcome = negotiation_agent.process_reply(
+    outcome = await negotiation_agent.process_reply_async(
         lead_name=state.get("primary_lead_name", "Founder"),
         company_name=state.get("company_name", "Company"),
         incoming_reply=incoming,

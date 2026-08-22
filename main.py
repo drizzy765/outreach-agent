@@ -6,6 +6,8 @@ from rich.panel import Panel
 from database.connection import init_db
 from workflow.graph import run_autonomous_outreach_pipeline
 from tools.email_verifier import EmailVerifier, generate_email_permutations
+from tools.email_sender import OutboundEmailSender
+from tools.imap_listener import InboundIMAPListener
 from agents.discovery import ProspectDiscoveryAgent
 from agents.audit import TechnicalAuditAgent
 from agents.enrichment import LeadEnrichmentAgent
@@ -224,8 +226,71 @@ def pitch(
 
     console.print(Panel(draft.get("body", ""), title="Drafted Outreach Body", style="green"))
 
+@app.command()
+def send(
+    to: str = typer.Option(..., "--to", "-t", help="Recipient email address"),
+    subject: str = typer.Option(..., "--subject", "-s", help="Email subject line"),
+    body: str = typer.Option(..., "--body", "-b", help="Email body text")
+):
+    """Send outbound pitch email via authenticated SMTP or test in dry-run mode."""
+    sender = OutboundEmailSender()
+    console.print(f"[bold cyan]📤 Dispatching outbound email to [green]{to}[/green]...[/bold cyan]")
+    res = asyncio.run(sender.send_email(recipient_email=to, subject=subject, body_text=body))
+
+    table = Table(title="Outbound Transmission Status", show_header=True, header_style="bold magenta")
+    table.add_column("Property", style="cyan")
+    table.add_column("Details", style="green")
+
+    table.add_row("Status", res.get("status", "UNKNOWN"))
+    table.add_row("Sender Domain", res.get("sender", "N/A"))
+    table.add_row("Recipient", res.get("recipient", to))
+    table.add_row("Jitter Delay", f"{res.get('jitter_delay_seconds', 0)}s")
+    table.add_row("Daily Count", str(res.get("daily_sent_count", 0)))
+    table.add_row("Message ID", str(res.get("message_id", "N/A")))
+    table.add_row("Details", res.get("details", ""))
+
+    console.print(table)
+
+@app.command()
+def inbox(
+    mock_sender: Optional[str] = typer.Option(None, "--mock-sender", help="Inject a mock reply sender email"),
+    mock_body: Optional[str] = typer.Option(None, "--mock-body", help="Inject a mock reply body text")
+):
+    """Check IMAP inbox for new prospect replies or simulate incoming responses."""
+    listener = InboundIMAPListener()
+    if mock_sender and mock_body:
+        listener.inject_mock_reply(
+            sender=mock_sender,
+            subject="Re: Technical audit findings",
+            body=mock_body
+        )
+        console.print(f"[yellow]Simulating incoming reply from {mock_sender}...[/yellow]")
+
+    replies = asyncio.run(listener.check_inbox())
+
+    if not replies:
+        console.print("[dim]No new replies found in inbox.[/dim]")
+        return
+
+    table = Table(title="Inbound Prospect Replies", show_header=True, header_style="bold green")
+    table.add_column("Sender", style="bold cyan")
+    table.add_column("Subject", style="yellow")
+    table.add_column("Body Snippet", style="dim")
+    table.add_column("Source", style="blue")
+
+    for msg in replies:
+        table.add_row(
+            msg.get("sender", "Unknown"),
+            msg.get("subject", "No Subject"),
+            msg.get("body", "")[:80] + "...",
+            msg.get("source", "imap")
+        )
+
+    console.print(table)
+
 if __name__ == "__main__":
     app()
+
 
 
 

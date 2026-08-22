@@ -48,3 +48,18 @@ class OutreachConversation(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     lead = relationship("ProspectLead", back_populates="conversations")
+    send_logs = relationship("EmailSendLog", back_populates="conversation", cascade="all, delete-orphan")
+
+class EmailSendLog(Base):
+    __tablename__ = "email_send_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("outreach_conversations.id", ondelete="CASCADE"), nullable=True)
+    sender_domain = Column(String(255), nullable=False)
+    recipient_email = Column(String(255), nullable=False, index=True)
+    subject = Column(String(255), nullable=True)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String(50), default="SENT")
+
+    conversation = relationship("OutreachConversation", back_populates="send_logs")
+

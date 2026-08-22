@@ -40,7 +40,20 @@ CREATE TABLE IF NOT EXISTS outreach_conversations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Outbound email log for warmup & rate-limiting audit
+CREATE TABLE IF NOT EXISTS email_send_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID REFERENCES outreach_conversations(id) ON DELETE CASCADE,
+    sender_domain VARCHAR(255) NOT NULL,
+    recipient_email VARCHAR(255) NOT NULL,
+    subject VARCHAR(255),
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) DEFAULT 'SENT'
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_prospect_companies_url ON prospect_companies(website_url);
 CREATE INDEX IF NOT EXISTS idx_prospect_leads_email ON prospect_leads(email);
 CREATE INDEX IF NOT EXISTS idx_outreach_conversations_stage ON outreach_conversations(stage);
+CREATE INDEX IF NOT EXISTS idx_email_send_logs_recipient ON email_send_logs(recipient_email);
+

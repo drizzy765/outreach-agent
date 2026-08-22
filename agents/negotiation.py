@@ -1,14 +1,24 @@
 import re
 import logging
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from config import settings
+from tools.llm_router import LLMRouter
 
 logger = logging.getLogger(__name__)
+
+NEGOTIATION_SYSTEM_PROMPT = """You are a polite, firm B2B AI Technical Partner negotiating project terms with a prospective client.
+Strict Business Constraints:
+- Rate floor: Minimum $5,000 fixed price or $150/hr. Never accept below this.
+- Maximum permitted discount: 10% off the quoted rate.
+- Milestone terms: 50% upfront deposit, 50% upon deployment.
+- If prospect asks for out-of-scope features (mobile apps, full rewrites) or custom legal redlines (MSAs, NDAs), state that the engineering lead is reviewing it.
+
+Reply in under 100 words directly addressing their specific inquiry while adhering strictly to terms."""
 
 class NegotiationEngineAgent:
     """
     Agent 5: Conversational Follow-Up & Bounded Negotiation Agent
-    Monitors prospect replies and handles responses within strict deterministic bounds:
+    Monitors prospect replies, answers technical questions, and handles negotiations within strict bounds:
     - Minimum hourly rate ($150/hr)
     - Minimum fixed project fee ($5,000)
     - Max discount (10%)
@@ -21,6 +31,7 @@ class NegotiationEngineAgent:
         self.min_fixed = settings.minimum_acceptable_fixed_project
         self.max_discount = settings.max_discount_percentage
         self.milestone_terms = settings.milestone_terms
+        self.router = LLMRouter()
 
     def extract_counter_offer(self, reply_text: str) -> Tuple[str, float]:
         """Extract pricing intent and any proposed dollar amounts or discount requests from message."""
@@ -38,7 +49,7 @@ class NegotiationEngineAgent:
             intent = "SCOPE_EXPANSION"
         elif any(w in text for w in ["unsubscribe", "not interested", "stop", "remove me"]):
             intent = "UNSUBSCRIBE"
-        elif proposed_amount > 0 or discount_percent > 0 or any(w in text for w in ["discount", "expensive", "cheaper", "budget", "rate", "price"]):
+        elif proposed_amount > 0 or discount_percent > 0 or re.search(r'\b(discount|expensive|cheaper|budget|rate|rates|pricing|price|cost|fee)\b', text):
             intent = "PRICE_NEGOTIATION"
         elif any(w in text for w in ["deal", "let's do it", "sounds good", "ready to move forward", "send invoice", "send contract", "ready to sign", "sign the agreement"]):
             intent = "ACCEPTANCE"
@@ -59,7 +70,7 @@ class NegotiationEngineAgent:
         Executes bounded deterministic state transition on prospect reply.
         """
         intent, figure = self.extract_counter_offer(incoming_reply)
-        first_name = lead_name.split()[0] if lead_name else "there"
+        first_name = lead_name.split()[0] if lead_name and lead_name != "Founder" else "there"
 
         # 1. Direct Acceptance -> Closed Won
         if intent == "ACCEPTANCE":
@@ -161,3 +172,39 @@ class NegotiationEngineAgent:
             "agreed_rate": None,
             "response_text": "Understood. You have been removed from further communications."
         }
+
+    async def process_reply_async(
+        self,
+        lead_name: str,
+        company_name: str,
+        incoming_reply: str,
+        current_quoted_rate: float = 6500.0,
+        is_hourly: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Async reply processing using LLM reasoning with deterministic guardrail enforcement.
+        """
+        # Always run deterministic checks first to guarantee floor/contract limits
+        deterministic_res = self.process_reply(
+            lead_name=lead_name,
+            company_name=company_name,
+            incoming_reply=incoming_reply,
+            current_quoted_rate=current_quoted_rate,
+            is_hourly=is_hourly
+        )
+
+        # If it's a technical question, attempt enhanced LLM explanation if available
+        intent, _ = self.extract_counter_offer(incoming_reply)
+        if intent == "TECHNICAL_QUESTION":
+            user_msg = f"Prospect from {company_name} asks: '{incoming_reply}'. Answer their technical question adhering to our stack."
+            llm_text, provider = await self.router.generate_completion(
+                system_prompt=NEGOTIATION_SYSTEM_PROMPT,
+                user_prompt=user_msg,
+                temperature=0.3,
+                max_tokens=250
+            )
+            if llm_text and provider != "offline_fallback":
+                deterministic_res["response_text"] = llm_text.strip()
+                deterministic_res["provider_used"] = provider
+
+        return deterministic_res
