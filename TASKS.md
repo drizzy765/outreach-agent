@@ -8,7 +8,7 @@ This document provides a comprehensive, phased execution plan for the **Autonomo
 
 - [x] **Phase 1: Multi-Source Prospect Discovery & Ingestion Engine**
 - [x] **Phase 2: Deep Headless Audit & Visual Diagnostics (Playwright & SPA Scraper)**
-- [ ] **Phase 3: Lead Enrichment & Deliverability Verification (OSINT & SMTP)**
+- [x] **Phase 3: Lead Enrichment & Deliverability Verification (OSINT & SMTP)**
 - [ ] **Phase 4: Dynamic Multi-LLM Value Pitch & Blueprint Generator**
 - [ ] **Phase 5: Inbound/Outbound Email Pipeline & Bounded Negotiation Engine**
 - [ ] **Phase 6: Two-Way Telegram HITL Bot, CRM Celebration & Background Scheduler**
@@ -70,21 +70,21 @@ Upgrade the basic HTTP GET audit into a high-fidelity diagnostic engine using Pl
 Enhance email discovery and verification with deep DOM crawling, permutation generation, DNS MX checking, and safe SMTP deliverability pings.
 
 ### Tasks
-- [ ] **3.1 DOM Deep Crawler Enhancement (`tools/web_crawler.py`)**
+- [x] **3.1 DOM Deep Crawler Enhancement (`tools/web_crawler.py`)**
   - Add crawling for `/about`, `/team`, `/contact`, `/leadership`, `/privacy`, and `/terms`.
-  - Extract executive names with associated titles (CEO, CTO, Head of AI, Founder).
-- [ ] **3.2 OSINT & Social Profile Resolver**
+  - Extract executive names with associated titles (CEO, CTO, Head of AI, Founder) and JSON-LD structured schema.
+- [x] **3.2 OSINT & Social Profile Resolver**
   - Extract GitHub/LinkedIn/X handles from website footers and resolve organizational founders.
-- [ ] **3.3 Permutation Engine Optimization (`tools/email_verifier.py`)**
-  - Generate clean permutations: `{first}.{last}`, `{first}`, `{f}{last}`, `{first}{last}`, `{first}_{last}`.
-- [ ] **3.4 DNS MX & Catch-All Validation**
+- [x] **3.3 Permutation Engine Optimization (`tools/email_verifier.py`)**
+  - Generate clean permutations: `{first}.{last}`, `{first}`, `{f}{last}`, `{first}{last}`, `{first}_{last}`, `{f}.{last}`, `{last}.{first}`.
+- [x] **3.4 DNS MX & Catch-All Validation**
   - Query DNS MX records with priority sorting.
   - Detect catch-all mail servers using randomized mailbox probes (`nonexistent_{hex}@domain`).
-- [ ] **3.5 Non-intrusive SMTP Port 25 Handshake**
+- [x] **3.5 Non-intrusive SMTP Port 25 Handshake**
   - Perform RFC 5321 `HELO -> MAIL FROM -> RCPT TO` without sending payload.
-  - Gracefully handle timeouts, greylisting, and ISP port 25 blocking with fallback classification.
-- [ ] **3.6 Phase 3 Unit Tests**
-  - Maintain & expand `tests/test_email_verifier.py` with DNS resolver mocks.
+  - Gracefully handle timeouts, greylisting, and ISP port 25 blocking with fallback classification (`PORT_25_BLOCKED`).
+- [x] **3.6 Phase 3 Unit Tests**
+  - Maintain & expand `tests/test_email_verifier.py` with DNS resolver mocks, JSON-LD parsing, and enrichment tests.
 
 ---
 

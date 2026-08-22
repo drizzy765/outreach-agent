@@ -3,7 +3,7 @@ import smtplib
 import socket
 import secrets
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import dns.resolver
 from email_validator import validate_email, EmailNotValidError
 
@@ -13,14 +13,14 @@ def generate_email_permutations(first_name: str, last_name: str, domain: str) ->
     """
     Generate standard corporate email permutations for a given first name, last name, and domain.
     """
-    fn = re.sub(r'[^a-zA-Z]', '', first_name).lower()
+    fn = re.sub(r'[^a-zA-Z]', '', first_name).lower() if first_name else ""
     ln = re.sub(r'[^a-zA-Z]', '', last_name).lower() if last_name else ""
     d = domain.lower().strip()
 
-    # Strip http://, https://, www., and paths
+    # Strip protocols, paths, and www.
     d = re.sub(r'https?://', '', d).split('/')[0].replace('www.', '')
 
-    permutations = []
+    permutations: List[str] = []
     if fn and ln:
         f_initial = fn[0]
         l_initial = ln[0]
@@ -34,17 +34,27 @@ def generate_email_permutations(first_name: str, last_name: str, domain: str) ->
             f"{f_initial}_{ln}@{d}",
             f"{fn}{l_initial}@{d}",
             f"{ln}.{fn}@{d}",
+            f"{ln}@{d}"
         ])
     elif fn:
         permutations.extend([
             f"{fn}@{d}",
             f"founder@{d}",
+            f"ceo@{d}",
+            f"cto@{d}",
             f"team@{d}",
             f"contact@{d}",
             f"hello@{d}"
         ])
-    
-    # Remove duplicates preserving order
+    else:
+        permutations.extend([
+            f"founder@{d}",
+            f"ceo@{d}",
+            f"team@{d}",
+            f"contact@{d}"
+        ])
+
+    # Deduplicate preserving order
     return list(dict.fromkeys(permutations))
 
 class EmailVerifier:
@@ -83,7 +93,7 @@ class EmailVerifier:
         return is_catch
 
     def _ping_smtp(self, mx_host: str, target_email: str) -> Tuple[int, str]:
-        """Perform SMTP handshake up to RCPT TO without issuing DATA."""
+        """Perform non-intrusive SMTP handshake up to RCPT TO without issuing DATA."""
         try:
             server = smtplib.SMTP(timeout=self.timeout)
             server.set_debuglevel(0)
@@ -92,17 +102,17 @@ class EmailVerifier:
             server.mail(self.sender_email)
             code, message = server.rcpt(target_email)
             server.quit()
-            return code, message.decode('utf-8', errors='ignore')
-        except (socket.timeout, socket.error, smtplib.SMTPException) as e:
+            return code, message.decode('utf-8', errors='ignore') if isinstance(message, bytes) else str(message)
+        except (socket.timeout, socket.error, smtplib.SMTPException, OSError) as e:
             return -1, str(e)
 
-    def verify(self, email: str) -> Dict[str, any]:
+    def verify(self, email: str) -> Dict[str, Any]:
         """
         Full verification pipeline:
         1. Syntax check
         2. DNS MX check
         3. Catch-all detection
-        4. SMTP RCPT TO ping
+        4. SMTP RCPT TO handshake ping
         """
         try:
             valid = validate_email(email, check_deliverability=False)
@@ -136,6 +146,8 @@ class EmailVerifier:
             status = "SMTP_VERIFIED"
         elif code in [550, 551, 552, 553, 554]:
             status = "MAILBOX_NOT_FOUND"
+        elif code == -1 and any(err in msg.lower() for err in ["permission denied", "network is unreachable", "connection refused", "timeout"]):
+            status = "PORT_25_BLOCKED"
         else:
             status = "UNVERIFIED"
 
@@ -146,6 +158,6 @@ class EmailVerifier:
             "details": msg
         }
 
-async def verify_email_address(email: str) -> Dict[str, any]:
+async def verify_email_address(email: str) -> Dict[str, Any]:
     verifier = EmailVerifier()
     return verifier.verify(email)

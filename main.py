@@ -8,6 +8,7 @@ from workflow.graph import run_autonomous_outreach_pipeline
 from tools.email_verifier import EmailVerifier, generate_email_permutations
 from agents.discovery import ProspectDiscoveryAgent
 from agents.audit import TechnicalAuditAgent
+from agents.enrichment import LeadEnrichmentAgent
 from agents.negotiation import NegotiationEngineAgent
 
 app = typer.Typer(help="Autonomous Multi-Agent Outreach Engine CLI")
@@ -158,7 +159,40 @@ def audit(
     console.print("\n[bold cyan]Audit Summary:[/bold cyan]")
     console.print(Panel(findings.get("audit_summary", "No summary generated."), style="dim"))
 
+@app.command()
+def enrich(
+    url: str = typer.Option(..., "--url", "-u", help="Target company website URL to crawl and enrich"),
+    save: bool = typer.Option(False, "--save", "-s", help="Save discovered leads to PostgreSQL CRM database")
+):
+    """Deep crawl website, extract executives and contacts, generate permutations and verify email deliverability."""
+    console.print(Panel(f"🎯 Crawling & Enriching Leads for [bold cyan]{url}[/bold cyan]", style="bold magenta"))
+    agent = LeadEnrichmentAgent()
+
+    async def _run():
+        if save:
+            await init_db()
+        return await agent.enrich_company(company_id=None, website_url=url)
+
+    leads = asyncio.run(_run())
+
+    table = Table(title=f"Enriched Leads for {url}", show_header=True, header_style="bold green")
+    table.add_column("Full Name", style="bold cyan")
+    table.add_column("Role", style="yellow")
+    table.add_column("Email Address", style="blue")
+    table.add_column("Verification Status", style="green")
+
+    for lead in leads:
+        table.add_row(
+            lead.get("full_name", "Unknown"),
+            lead.get("role", "Executive"),
+            lead.get("email", ""),
+            lead.get("verification_status", "UNVERIFIED")
+        )
+
+    console.print(table)
+
 if __name__ == "__main__":
     app()
+
 
 
