@@ -54,4 +54,14 @@ class Settings(BaseSettings):
     max_discount_percentage: float = 10.0
     milestone_terms: str = "50% upfront deposit, 50% upon milestone completion and deployment"
 
+    # Invoicing & Webhooks
+    invoicing_webhook_url: Optional[str] = None
+
+    # Background Scheduler
+    scheduler_discovery_interval_hours: int = 24
+    scheduler_inbox_interval_minutes: int = 15
+    scheduler_followup_days_threshold: int = 3
+
 settings = Settings()
+
+

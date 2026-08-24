@@ -1,10 +1,12 @@
 import asyncio
+from typing import Optional
 import typer
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from database.connection import init_db
 from workflow.graph import run_autonomous_outreach_pipeline
+from workflow.scheduler import AutonomousOutreachScheduler
 from tools.email_verifier import EmailVerifier, generate_email_permutations
 from tools.email_sender import OutboundEmailSender
 from tools.imap_listener import InboundIMAPListener
@@ -13,6 +15,7 @@ from agents.audit import TechnicalAuditAgent
 from agents.enrichment import LeadEnrichmentAgent
 from agents.pitcher import ValueAddPitcherAgent
 from agents.negotiation import NegotiationEngineAgent
+
 
 app = typer.Typer(help="Autonomous Multi-Agent Outreach Engine CLI")
 console = Console()
@@ -286,10 +289,57 @@ def inbox(
             msg.get("source", "imap")
         )
 
+@app.command()
+def followup(
+    days: int = typer.Option(3, "--days", "-d", help="Days threshold of inactivity to trigger follow-up bump")
+):
+    """Scan PostgreSQL CRM for stale outreach pitches and execute follow-up bumps."""
+    console.print(f"[bold cyan]🔍 Scanning CRM for pitches unreplied after {days} days...[/bold cyan]")
+    scheduler = AutonomousOutreachScheduler()
+    followups = asyncio.run(scheduler.run_followup_sequencing_job(days_threshold=days))
+
+    if not followups:
+        console.print("[green]✓ No stale outreach requiring follow-up at this time.[/green]")
+        return
+
+    table = Table(title="Triggered Follow-Up Sequences", show_header=True, header_style="bold green")
+    table.add_column("Company", style="bold cyan")
+    table.add_column("Recipient Email", style="blue")
+    table.add_column("Status", style="green")
+
+    for f in followups:
+        table.add_row(f.get("company", ""), f.get("lead_email", ""), f.get("status", "FOLLOWED_UP"))
+
     console.print(table)
+
+@app.command()
+def daemon(
+    inbox_interval: int = typer.Option(15, "--inbox-interval", help="Interval in minutes for IMAP inbox checks"),
+    discovery_interval: int = typer.Option(24, "--discovery-interval", help="Interval in hours for multi-source discovery runs"),
+    followup_interval: int = typer.Option(12, "--followup-interval", help="Interval in hours for follow-up sequence checks")
+):
+    """Launch autonomous background scheduler daemon for periodic discovery, reply monitoring, and HITL Telegram handling."""
+    console.print(Panel("🚀 Starting Autonomous Outreach Engine Background Daemon", style="bold blue"))
+    console.print(f"• Inbound IMAP Polling: Every [cyan]{inbox_interval}[/cyan] minutes")
+    console.print(f"• Prospect Discovery: Every [cyan]{discovery_interval}[/cyan] hours")
+    console.print(f"• Follow-Up Sequencing: Every [cyan]{followup_interval}[/cyan] hours")
+    console.print(f"• Interactive Telegram Poller: [green]Active (2s loop)[/green]\n")
+
+    scheduler = AutonomousOutreachScheduler()
+    try:
+        asyncio.run(scheduler.start_daemon(
+            inbox_interval_minutes=inbox_interval,
+            discovery_interval_hours=discovery_interval,
+            followup_interval_hours=followup_interval
+        ))
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Shutdown signal received. Stopping daemon...[/yellow]")
+        scheduler.stop()
+        console.print("[green]✓ Scheduler daemon stopped cleanly.[/green]")
 
 if __name__ == "__main__":
     app()
+
 
 
 

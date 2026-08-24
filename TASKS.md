@@ -11,9 +11,10 @@ This document provides a comprehensive, phased execution plan for the **Autonomo
 - [x] **Phase 3: Lead Enrichment & Deliverability Verification (OSINT & SMTP)**
 - [x] **Phase 4: Dynamic Multi-LLM Value Pitch & Blueprint Generator**
 - [x] **Phase 5: Inbound/Outbound Email Pipeline & Bounded Negotiation Engine**
-- [ ] **Phase 6: Two-Way Telegram HITL Bot, CRM Celebration & Background Scheduler**
+- [x] **Phase 6: Two-Way Telegram HITL Bot, CRM Celebration & Background Scheduler**
 
 ---
+
 
 ## 🚀 Phase 1: Multi-Source Prospect Discovery & Ingestion Engine
 
@@ -140,19 +141,20 @@ Implement full email delivery with warmup guardrails, background inbound IMAP mo
 Transform one-way notifications into an interactive two-way Telegram management bot, auto-invoicing deal triggers, and automated recurring background jobs.
 
 ### Tasks
-- [ ] **6.1 Interactive Two-Way Telegram Bot (`tools/telegram_bot.py`)**
+- [x] **6.1 Interactive Two-Way Telegram Bot (`tools/telegram_bot.py`)**
   - Implement Telegram webhook/long-polling callback query handler.
   - Send inline action buttons when HITL handover triggers: `[Approve Discount]`, `[Counter with $X]`, `[Take Over via Email]`.
   - Update `outreach_conversations` state directly from Telegram button clicks.
-- [ ] **6.2 Deal Won & Auto-Invoicing Trigger (`agents/alerts.py`)**
+- [x] **6.2 Deal Won & Auto-Invoicing Trigger (`agents/alerts.py`)**
   - "Gig Won" celebration alert with rate summary and client details.
   - Webhook dispatch for auto-invoicing (Stripe / InvoiceNinja / QuickBooks).
-- [ ] **6.3 Background Task Scheduler (`workflow/scheduler.py`)**
-  - APScheduler daemon for:
+- [x] **6.3 Background Task Scheduler (`workflow/scheduler.py`)**
+  - APScheduler / Asyncio background daemon for:
     - Daily discovery runs (e.g. 08:00 AM UTC).
     - Periodic inbox reply checks (every 15 minutes).
     - Automated follow-up sequencing (bump after 3 business days of no reply).
-- [ ] **6.4 CLI Command Expansion (`main.py`)**
-  - Add CLI commands: `daemon` (runs background scheduler), `inbox` (checks replies), `audit` (runs standalone Playwright audit), `discover` (runs multi-source scraper).
-- [ ] **6.5 End-to-End Pipeline Verification**
-  - Full end-to-end dry run test verifying database persistence, LangGraph routing, and alert dispatching.
+- [x] **6.4 CLI Command Expansion (`main.py`)**
+  - Add CLI commands: `daemon` (runs background scheduler), `followup` (executes bump sequencing), `inbox` (checks replies), `audit` (runs standalone Playwright audit), `discover` (runs multi-source scraper).
+- [x] **6.5 End-to-End Pipeline Verification**
+  - Full end-to-end dry run test suite verifying database persistence, LangGraph routing, scheduler jobs, and alert dispatching (`tests/test_telegram_bot.py`, `tests/test_alerts.py`, `tests/test_scheduler.py`, `tests/test_pipeline.py`).
+
