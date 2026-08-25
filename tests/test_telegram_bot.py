@@ -1,34 +1,47 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from tools.telegram_bot import send_telegram_alert, send_hitl_escalation, celebrate_gig_won, TelegramBotHandler
+from config import settings
 
 @pytest.mark.asyncio
 async def test_telegram_mock_alert():
-    # Without token set, should log mock and return False
-    res = await send_telegram_alert("Test alert message")
-    assert res is False
+    with patch.object(settings, "telegram_bot_token", ""):
+        res = await send_telegram_alert("Test alert message")
+        assert res is False
 
 @pytest.mark.asyncio
 async def test_celebrate_gig_won_mock():
-    res = await celebrate_gig_won(
-        lead_name="Alex Mercer",
-        company_name="DataSync",
-        rate=5500.0,
-        pitch_type="Custom Vector Search"
-    )
-    assert res is False
+    with patch.object(settings, "telegram_bot_token", ""):
+        res = await celebrate_gig_won(
+            lead_name="Alex Mercer",
+            company_name="DataSync",
+            rate=5500.0,
+            pitch_type="Custom Vector Search"
+        )
+        assert res is False
 
 @pytest.mark.asyncio
 async def test_send_hitl_escalation_mock():
-    res = await send_hitl_escalation(
-        conversation_id="conv-123",
-        lead_name="Elon",
-        company_name="X Corp",
-        reason="Discount requested below floor",
-        last_message="Can we do ,000 for this?",
-        proposed_rate=3000.0
-    )
-    assert res is False
+    with patch.object(settings, "telegram_bot_token", ""):
+        res = await send_hitl_escalation(
+            conversation_id="conv-123",
+            lead_name="Elon",
+            company_name="X Corp",
+            reason="Discount requested below floor",
+            last_message="Can we do $3,000 for this?",
+            proposed_rate=3000.0
+        )
+        assert res is False
+
+@pytest.mark.asyncio
+async def test_telegram_message_commands():
+    handler = TelegramBotHandler()
+    res_help = await handler.handle_message_command("/help", "Admin")
+    assert "Autonomous Outreach" in res_help
+    assert "/find" in res_help
+
+    res_stats = await handler.handle_message_command("/stats", "Admin")
+    assert "CRM Pipeline Dashboard" in res_stats
 
 @pytest.mark.asyncio
 async def test_telegram_bot_handler_actions():

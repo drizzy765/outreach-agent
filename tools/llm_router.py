@@ -154,26 +154,168 @@ class LLMRouter:
         company_name: str,
         website_url: str,
         audit_findings: Dict[str, Any],
-        pitch_angle: str = "CUSTOM_ML_AUDIT"
+        pitch_angle: str = "VECTOR_SEMANTIC_SEARCH"
     ) -> Dict[str, str]:
         """
-        Intelligent offline synthesizer.
-        Positions the sender as an AI/ML Engineer proposing a bespoke technical solution.
+        Intelligent multi-angle offline synthesizer.
+        Applies B2B cold outreach psychology: Pattern Interrupt, De-Risking Upfront, Concrete FinOps/Engineering ROI, and Frictionless CTAs.
         """
         first_name = lead_name.split()[0] if lead_name and lead_name != "Founder" else "there"
         ttfb = audit_findings.get("ttfb_ms", 180.0)
-        load_time = audit_findings.get("load_time_ms", 350.0)
         detected_apis = ", ".join(audit_findings.get("detected_apis", [])) or "Modern Web Stack"
-        search_diagnosis = audit_findings.get("search_diagnosis", "Standard Keyword Matching")
+        angle = pitch_angle or audit_findings.get("recommended_pitch_angle", "VECTOR_SEMANTIC_SEARCH")
 
         sender_name = getattr(settings, "sender_name", "Timilehin Agoro")
         sender_title = getattr(settings, "sender_title", "AI / ML Engineer")
         portfolio_url = getattr(settings, "sender_portfolio_url", "https://github.com/drizzy765")
         resume_url = getattr(settings, "sender_resume_url", "https://linkedin.com/in/timilehin-agoro")
 
-        subject = f"Engineered solution for {company_name}'s search & latency architecture"
-        blueprint = f"""
-┌────────────────────────────────────────────────────────┐
+        # 1. LLM FinOps & Token Cost Optimization Angle
+        if angle == "LLM_FINOPS_OPTIMIZATION":
+            subject = f"Prompt caching architecture to cut {company_name}'s LLM API costs by 40-60%"
+            blueprint = """┌────────────────────────────────────────────────────────┐
+│            LLM SEMANTIC CACHING & FINOPS ROUTER        │
+│                                                        │
+│  [User Prompt] ──► [FastAPI Semantic Cache Layer]      │
+│                            │ (Hit: <35ms, $0.00)       │
+│                            ▼                           │
+│               [Qdrant Embeddings / Redis]              │
+│                            │ (Miss: Route Cheap Model) │
+│                            ▼                           │
+│               [LLaMA-3.3 / Groq] ──► [OpenAI Fallback] │
+└────────────────────────────────────────────────────────┘"""
+            body = f"""Hi {first_name},
+
+I’m {sender_name}, an AI/ML engineer. I took a look through {company_name} ({website_url})—as user usage and prompt volumes scale, recurring LLM token bills and inference latency quickly become major margin leaks.
+
+To solve this, I designed a lightweight semantic prompt-caching microservice with small-model cascading:
+• Resolves 30–50% of repetitive user prompts in <35ms for $0.00 API cost.
+• Plugs in as an async proxy with zero changes to your core database schema or application logic.
+
+{blueprint}
+
+I would love to prove the performance gains and build this prototype for {company_name}. You can check out my project background here:
+• Portfolio / GitHub: {portfolio_url}
+• LinkedIn / Resume: {resume_url}
+
+Would you be open to taking a look at a 2-minute architecture breakdown on GitHub?
+
+Best regards,
+{sender_name}
+{sender_title}
+"""
+
+        # 2. High API / TTFB Latency Optimization Angle
+        elif angle == "API_LATENCY_OPTIMIZATION":
+            subject = f"Sub-45ms caching gateway to eliminate TTFB bottlenecks on {company_name}"
+            blueprint = """┌────────────────────────────────────────────────────────┐
+│             LOW-LATENCY ASYNC EDGE CACHE               │
+│                                                        │
+│  [Incoming Request] ──► [FastAPI Async Proxy Gateway]  │
+│                                  │                     │
+│                 ┌────────────────┴────────────────┐    │
+│                 ▼                                 ▼    │
+│       [Redis In-Memory Cache]             [Origin DB/API]│
+│       (<25ms Hot Responses)               (Zero Strain)│
+└────────────────────────────────────────────────────────┘"""
+            body = f"""Hi {first_name},
+
+I’m {sender_name}, an AI/ML engineer. I ran a quick performance benchmark on {company_name} ({website_url}) this morning and noticed query latency / TTFB is around ~{ttfb}ms ({detected_apis}).
+
+At scale, high P99 latency directly impacts user retention and API throughput. I drafted a decoupled async caching gateway to sit in front of your heaviest endpoints:
+• Drops P99 response times down to <45ms without database lockups.
+• Non-invasive drop-in service with zero downtime.
+
+{blueprint}
+
+I'd love the opportunity to build and verify this working benchmark for {company_name}. My background:
+• Portfolio / GitHub: {portfolio_url}
+• LinkedIn / Resume: {resume_url}
+
+Worth a quick 5-minute chat to review the latency benchmark graphs?
+
+Best regards,
+{sender_name}
+{sender_title}
+"""
+
+        # 3. Real-time Event Ingestion & Webhooks Angle
+        elif angle == "REALTIME_INGESTION_PIPELINE":
+            subject = f"Zero-loss async event ingestion pipeline for {company_name}"
+            blueprint = """┌────────────────────────────────────────────────────────┐
+│           ASYNC RESILIENT EVENT INGESTION CORE         │
+│                                                        │
+│  [Webhook / Event Stream] ──► [FastAPI Non-Blocking]   │
+│                                       │                │
+│                                       ▼                │
+│                            [Redis Streams Buffer]      │
+│                                       │                │
+│                                       ▼                │
+│                         [Celery / Async Worker Pool]   │
+│                                       │                │
+│                                       ▼                │
+│                         [Primary DB - Zero Lockup]     │
+└────────────────────────────────────────────────────────┘"""
+            body = f"""Hi {first_name},
+
+I’m {sender_name}, an AI/ML engineer. I’ve been following {company_name} ({website_url}) and noticed you handle high-throughput event and telemetry flows.
+
+Sudden webhook bursts often lead to queue backpressure and silent dropped events. I designed an asynchronous ingestion pipeline with Redis Streams to guarantee 99.99% event reliability:
+• Non-blocking async ingest absorbs traffic spikes with zero dropped events.
+• Completely decoupled from your primary database transactions.
+
+{blueprint}
+
+I would love to build this prototype for {company_name}. My past work and projects:
+• Portfolio / GitHub: {portfolio_url}
+• LinkedIn / Resume: {resume_url}
+
+Open to seeing a 2-minute code walkthrough on GitHub?
+
+Best regards,
+{sender_name}
+{sender_title}
+"""
+
+        # 4. Agentic Copilot & Workflow Automation Angle
+        elif angle == "AGENTIC_COPILOT_AUTOMATION":
+            subject = f"Domain-specific workflow copilot prototype for {company_name}"
+            blueprint = """┌────────────────────────────────────────────────────────┐
+│            AGENTIC WORKFLOW COPILOT PIPELINE           │
+│                                                        │
+│  [User Intent] ──► [LangGraph State Machine Engine]    │
+│                            │ (Bounded Decision Tree)   │
+│                            ▼                           │
+│               [Tool Execution & API Connectors]        │
+│                            │ (HITL Safety Bounds)      │
+│                            ▼                           │
+│               [Verified Action / Output State]         │
+└────────────────────────────────────────────────────────┘"""
+            body = f"""Hi {first_name},
+
+I’m {sender_name}, an AI/ML engineer. I explored {company_name} ({website_url}) and saw a high-leverage opportunity to streamline your core user workflow with an intelligent embedded copilot.
+
+Rather than generic LLM wrappers, I build domain-specific LangGraph agent microservices that execute structured, multi-step user actions autonomously with strict guardrails:
+• Increases user engagement and product retention.
+• Standalone containerized service that connects seamlessly via webhooks and REST.
+
+{blueprint}
+
+I would love to prove my skills and build this working copilot prototype for {company_name}. My background:
+• Portfolio / GitHub: {portfolio_url}
+• LinkedIn / Resume: {resume_url}
+
+Open to a 90-second video walkthrough of the working prototype?
+
+Best regards,
+{sender_name}
+{sender_title}
+"""
+
+        # 5. Default / Semantic Vector Search Angle
+        else:
+            subject = f"Semantic vector search microservice for {company_name}"
+            blueprint = """┌────────────────────────────────────────────────────────┐
 │            DECOUPLED VECTOR RETRIEVAL PIPELINE         │
 │                                                        │
 │  [Client App] ──► [FastAPI Async Core] ──► [Qdrant]    │
@@ -181,27 +323,24 @@ class LLMRouter:
 │                        ▼                       ▼       │
 │               [Primary DB] ◄── [Embedding Cache Layer] │
 │               (Zero Downtime)     (<45ms Query Latency)│
-└────────────────────────────────────────────────────────┘
-"""
-        body = f"""Hi {first_name},
+└────────────────────────────────────────────────────────┘"""
+            body = f"""Hi {first_name},
 
-I’m {sender_name}, a recent AI/ML engineering graduate. I’ve been following {company_name} ({website_url}) and recently built production projects around high-performance vector retrieval and LLM agents.
-
-I ran a quick technical diagnostic on {company_name} and noticed a high-impact engineering opportunity:
+I’m {sender_name}, an AI/ML engineer. I ran a quick technical diagnostic on {company_name} ({website_url}) and noticed a high-impact engineering opportunity:
 • Query latency / TTFB is around ~{ttfb}ms ({detected_apis}).
-• Current search relies on {search_diagnosis}, which could be upgraded to semantic embeddings for much higher user conversion.
+• Current search can be upgraded to semantic embeddings to significantly increase search-to-action conversion.
 
-To demonstrate how this would work on your stack, I drafted a lightweight, decoupled microservice blueprint designed to cut search response times and deliver instant semantic relevance:
+I drafted a lightweight, decoupled microservice blueprint designed to deliver instant semantic relevance:
+• Non-invasive async microservice with zero core database schema changes.
+• Sub-45ms vector search response times.
 
 {blueprint}
 
-I would love the opportunity to prove my skills and build this working prototype for {company_name}. 
-
-You can check out my projects and background here:
+I would love the opportunity to build this working prototype for {company_name}. My background:
 • Portfolio / GitHub: {portfolio_url}
-• Resume / LinkedIn: {resume_url}
+• LinkedIn / Resume: {resume_url}
 
-Would you be open to a quick 10-minute chat this week to see the prototype in action?
+Open to taking a look at a 2-minute architecture breakdown on GitHub?
 
 Best regards,
 {sender_name}
@@ -212,6 +351,6 @@ Best regards,
             "subject": subject,
             "body": body,
             "blueprint_snippet": blueprint.strip(),
-            "pitch_type": "AI_ENGINEER_SOLUTION",
+            "pitch_type": angle,
             "provider_used": "deterministic_offline_synthesizer"
         }

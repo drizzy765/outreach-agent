@@ -38,6 +38,7 @@ async def test_email_sender_daily_limit_cap():
 @pytest.mark.asyncio
 async def test_imap_listener_mock_inbox():
     listener = InboundIMAPListener()
+    listener.imap_user = None
     listener.inject_mock_reply(
         sender="cto@target-startup.io",
         subject="Re: Fast API vector search",

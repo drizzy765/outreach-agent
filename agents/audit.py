@@ -70,19 +70,22 @@ class TechnicalAuditAgent:
                     if not audit_results["ai_agent_gap_detected"]:
                         audit_results["ai_agent_diagnosis"] = "Voice / Real-time copilot workflows detected."
 
-                    # Determine pitch angle
-                    title_and_apis = (pw_res.get("page_title", "") + " " + " ".join(audit_results["detected_apis"])).lower()
-                    if any(term in title_and_apis for term in ["analytics", "fintech", "trading", "quant", "finance", "crypto"]):
-                        audit_results["recommended_pitch_angle"] = "QUANTVAULT_DEMO"
+                    # Classify optimal engineering angle using zero-token heuristic rules
+                    content_blob = (pw_res.get("page_title", "") + " " + " ".join(audit_results["detected_apis"])).lower()
+                    if any(term in content_blob for term in ["llm", "openai", "gpt", "anthropic", "claude", "ai agent", "chatbot", "generative ai"]):
+                        audit_results["recommended_pitch_angle"] = "LLM_FINOPS_OPTIMIZATION"
+                    elif any(term in content_blob for term in ["search", "catalog", "marketplace", "e-commerce", "docs", "documentation", "kb", "knowledge base"]):
+                        audit_results["recommended_pitch_angle"] = "VECTOR_SEMANTIC_SEARCH"
+                    elif audit_results["ttfb_ms"] > 900.0:
+                        audit_results["recommended_pitch_angle"] = "API_LATENCY_OPTIMIZATION"
+                    elif any(term in content_blob for term in ["webhook", "telemetry", "streaming", "events", "analytics", "fintech", "pipeline"]):
+                        audit_results["recommended_pitch_angle"] = "REALTIME_INGESTION_PIPELINE"
                     else:
-                        audit_results["recommended_pitch_angle"] = "CUSTOM_ML_AUDIT"
+                        audit_results["recommended_pitch_angle"] = "AGENTIC_COPILOT_AUTOMATION"
 
                     audit_results["audit_summary"] = (
                         f"Audited {target_url} via Playwright (Load: {audit_results['load_time_ms']}ms, TTFB: {audit_results['ttfb_ms']}ms). "
-                        f"JS Errors: {len(audit_results['js_console_errors'])}. "
-                        f"Vector search gap: {audit_results['search_gap_detected']}. "
-                        f"AI voice gap: {audit_results['ai_agent_gap_detected']}. "
-                        f"Recommended pitch: {audit_results['recommended_pitch_angle']}."
+                        f"Angle: {audit_results['recommended_pitch_angle']}."
                     )
                     return audit_results
             except Exception as e:
@@ -102,43 +105,39 @@ class TechnicalAuditAgent:
 
                 html = response.text.lower()
                 soup = BeautifulSoup(response.text, "html.parser")
+                page_text = soup.get_text(separator=" ").lower()[:5000]
 
                 # Inspect Search Capabilities
                 has_semantic_search = any(term in html for term in ["semantic search", "vector search", "pinecone", "weaviate", "qdrant", "chroma", "embeddings", "rag"])
-                if not has_semantic_search:
-                    audit_results["search_gap_detected"] = True
-                    audit_results["search_diagnosis"] = "Platform relies on high-latency substring/keyword search without semantic vector reranking."
-                else:
-                    audit_results["search_gap_detected"] = False
-                    audit_results["search_diagnosis"] = "Semantic vector search detected."
+                audit_results["search_gap_detected"] = not has_semantic_search
+                audit_results["search_diagnosis"] = "Semantic embeddings active" if has_semantic_search else "Lacks semantic vector embeddings"
 
-                # Inspect AI Voice / Autonomous Workflow Gaps
-                has_voice_ai = any(term in html for term in ["voice agent", "realtime api", "voice command", "quantvault", "telemetry agent", "copilot"])
-                if not has_voice_ai:
-                    audit_results["ai_agent_gap_detected"] = True
-                    audit_results["ai_agent_diagnosis"] = "Lacks agentic voice command interface and predictive quantitative telemetry."
-                else:
-                    audit_results["ai_agent_gap_detected"] = False
-                    audit_results["ai_agent_diagnosis"] = "Real-time AI/voice automation detected."
+                # Inspect AI Gaps
+                has_ai_agents = any(term in html for term in ["agentic", "langchain", "langgraph", "copilot", "autonomous agent"])
+                audit_results["ai_agent_gap_detected"] = not has_ai_agents
+                audit_results["ai_agent_diagnosis"] = "AI copilot active" if has_ai_agents else "Missing specialized AI copilot workflows"
 
-                # Determine optimal pitch angle
-                if any(term in html for term in ["analytics", "fintech", "trading", "quant", "finance", "portfolio", "telemetry"]):
-                    audit_results["recommended_pitch_angle"] = "QUANTVAULT_DEMO"
+                # Determine 6-Angle Problem Classification (0 LLM Tokens)
+                if any(term in page_text for term in ["openai", "anthropic", "gpt-4", "claude", "llm", "chatbot", "prompt", "token", "generative ai"]):
+                    audit_results["recommended_pitch_angle"] = "LLM_FINOPS_OPTIMIZATION"
+                elif any(term in page_text for term in ["webhook", "telemetry", "streaming", "events", "analytics", "fintech", "pipeline", "etl", "trading", "quant"]):
+                    audit_results["recommended_pitch_angle"] = "REALTIME_INGESTION_PIPELINE"
+                elif any(term in page_text for term in ["search", "catalog", "directory", "docs", "documentation", "kb", "knowledge base", "marketplace"]) or audit_results["search_gap_detected"]:
+                    audit_results["recommended_pitch_angle"] = "VECTOR_SEMANTIC_SEARCH"
+                elif audit_results["ttfb_ms"] > 900.0:
+                    audit_results["recommended_pitch_angle"] = "API_LATENCY_OPTIMIZATION"
                 else:
-                    audit_results["recommended_pitch_angle"] = "CUSTOM_ML_AUDIT"
+                    audit_results["recommended_pitch_angle"] = "AGENTIC_COPILOT_AUTOMATION"
 
                 audit_results["audit_summary"] = (
-                    f"Audited {target_url} (TTFB: {audit_results['ttfb_ms']}ms, Size: {audit_results['page_weight_kb']}KB). "
-                    f"Vector search gap: {audit_results['search_gap_detected']}. "
-                    f"AI workflow gap: {audit_results['ai_agent_gap_detected']}. "
-                    f"Recommended pitch: {audit_results['recommended_pitch_angle']}."
+                    f"Audited {target_url} (TTFB: {audit_results['ttfb_ms']}ms). "
+                    f"Angle: {audit_results['recommended_pitch_angle']}."
                 )
 
         except Exception as e:
             logger.error(f"Audit failed for {target_url}: {e}")
             audit_results["audit_summary"] = f"Diagnostic scan simulated with fallback parameters: {e}"
-            audit_results["search_gap_detected"] = True
-            audit_results["ai_agent_gap_detected"] = True
+            audit_results["recommended_pitch_angle"] = "VECTOR_SEMANTIC_SEARCH"
 
         return audit_results
 

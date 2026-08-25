@@ -126,27 +126,11 @@ class NegotiationEngineAgent:
                 )
             }
 
-        # 4. Price Negotiation within Bounded Limits
+        # 4. Cash-Flow Maximizer Tiered Price Negotiation
         if intent == "PRICE_NEGOTIATION":
-            floor = self.min_hourly if is_hourly else self.min_fixed
-            allowed_floor = current_quoted_rate * (1 - (self.max_discount / 100))
-
-            if figure > 0 and figure < floor:
-                # Proposed rate is below absolute floor -> Handover
-                return {
-                    "stage": "HITL_HANDOVER",
-                    "human_override_required": True,
-                    "override_reason": f"Prospect counter-offered ${figure:,.2f}, which is below our hard floor of ${floor:,.2f}.",
-                    "agreed_rate": None,
-                    "response_text": (
-                        f"Hi {first_name},\n\n"
-                        f"Thank you for the proposal. To ensure high engineering quality, dedicated focus, and end-to-end integration, my standard project floor is ${floor:,.2f} ({self.milestone_terms}).\n\n"
-                        "Would you be open to adjusting the initial scope so we can meet within your budget?"
-                    )
-                }
-            else:
-                # Concede standard bounded discount (up to 10%)
-                discounted_rate = max(allowed_floor, floor)
+            # General discount request without specific figure -> offer 10% discount
+            if figure == 0.0:
+                discounted_rate = current_quoted_rate * (1 - (self.max_discount / 100))
                 return {
                     "stage": "NEGOTIATING",
                     "human_override_required": False,
@@ -157,6 +141,67 @@ class NegotiationEngineAgent:
                         f"I understand budget constraints. If we kick off this week, I can offer an adjusted project fee of ${discounted_rate:,.2f} "
                         f"under our standard milestone terms ({self.milestone_terms}).\n\n"
                         "Does that work for your team?"
+                    )
+                }
+
+            # Tier A: Premium / Full Production Deployment ($3,500+)
+            elif figure >= 3500.0:
+                return {
+                    "stage": "NEGOTIATING",
+                    "human_override_required": False,
+                    "override_reason": None,
+                    "agreed_rate": figure,
+                    "response_text": (
+                        f"Hi {first_name},\n\n"
+                        f"That works for me. I can deliver the full production microservice integration at ${figure:,.2f} "
+                        f"under our standard milestone terms ({self.milestone_terms}).\n\n"
+                        "Let's schedule a brief kickoff call this week to align on API credentials and repository setup."
+                    )
+                }
+
+            # Tier B: Fast Sprint MVP ($1,200 - $3,499) -> Never turn away, capture immediate cash flow
+            elif 1200.0 <= figure < 3500.0:
+                return {
+                    "stage": "NEGOTIATING",
+                    "human_override_required": False,
+                    "override_reason": None,
+                    "agreed_rate": figure,
+                    "response_text": (
+                        f"Hi {first_name},\n\n"
+                        f"I completely understand budget constraints and want to make sure you see immediate ROI. "
+                        f"I can work within your ${figure:,.2f} budget for a focused 3-to-4 day Phase 1 Sprint, "
+                        f"delivering the core working decoupled microservice, Docker setup, and benchmark suite ({self.milestone_terms}).\n\n"
+                        f"Once you verify the performance gains in production, you can apply 100% of this ${figure:,.2f} "
+                        "towards the full deployment.\n\n"
+                        "Does that work for your team to kick off this week?"
+                    )
+                }
+
+            # Tier C: Rapid 48-Hour Technical Deep-Dive ($500 - $1,199)
+            elif 500.0 <= figure < 1200.0:
+                return {
+                    "stage": "NEGOTIATING",
+                    "human_override_required": False,
+                    "override_reason": None,
+                    "agreed_rate": figure,
+                    "response_text": (
+                        f"Hi {first_name},\n\n"
+                        f"To fit your ${figure:,.2f} budget, I can deliver a focused 48-hour Technical Deep-Dive & Architecture Package: "
+                        "a complete benchmark analysis, reproducible Docker blueprint, and integration roadmap for your engineering team.\n\n"
+                        "Would you like to move forward with this initial roadmap?"
+                    )
+                }
+
+            # Tier D: Unreasonably low (< $500) -> Instant Telegram HITL Escalation
+            else:
+                return {
+                    "stage": "HITL_HANDOVER",
+                    "human_override_required": True,
+                    "override_reason": f"Prospect counter-offered ${figure:,.2f} (below $500 micro-tier). Escalating for manual approval.",
+                    "agreed_rate": None,
+                    "response_text": (
+                        f"Hi {first_name},\n\n"
+                        "Thank you for the proposal. Let me review the scope requirements and see how we can structure a tailored pilot package that fits your budget."
                     )
                 }
 

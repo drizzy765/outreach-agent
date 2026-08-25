@@ -184,7 +184,28 @@ class AutonomousOutreachScheduler:
     ):
         """Run the scheduler daemon continuously in an asynchronous event loop."""
         self.is_running = True
-        await init_db()
+        try:
+            await init_db()
+        except Exception as e:
+            logger.warning(f"Database initialization warning (proceeding with fallback): {e}")
+
+        # Start lightweight cloud health-check HTTP server if PORT is set (Render / Cloud deployment)
+        import os
+        port_env = os.environ.get("PORT")
+        if port_env:
+            try:
+                port = int(port_env)
+                async def handle_health_check(reader, writer):
+                    await reader.readline()
+                    response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK"
+                    writer.write(response)
+                    await writer.drain()
+                    writer.close()
+                await asyncio.start_server(handle_health_check, "0.0.0.0", port)
+                logger.info(f"🚀 Cloud Health check HTTP server active on 0.0.0.0:{port}")
+            except Exception as e:
+                logger.debug(f"Cloud health server init skipped: {e}")
+
         logger.info("🚀 Autonomous Outreach Scheduler Daemon started.")
 
         last_inbox_check = datetime.min

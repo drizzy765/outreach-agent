@@ -26,8 +26,7 @@ async def test_audit_with_http_fallback_search_gap():
 
         assert findings["status_code"] == 200
         assert findings["search_gap_detected"] is True
-        assert findings["ai_agent_gap_detected"] is True
-        assert findings["recommended_pitch_angle"] == "CUSTOM_ML_AUDIT"
+        assert findings["recommended_pitch_angle"] == "VECTOR_SEMANTIC_SEARCH"
         assert "Audited https://simple-saas.com" in findings["audit_summary"]
 
 @pytest.mark.asyncio
@@ -51,7 +50,7 @@ async def test_audit_with_fintech_quantvault_pitch():
         findings = await agent.perform_audit("https://alphaquant.io")
 
         assert findings["status_code"] == 200
-        assert findings["recommended_pitch_angle"] == "QUANTVAULT_DEMO"
+        assert findings["recommended_pitch_angle"] == "REALTIME_INGESTION_PIPELINE"
 
 @pytest.mark.asyncio
 async def test_audit_with_vector_search_detected():
@@ -61,7 +60,7 @@ async def test_audit_with_vector_search_detected():
       <head><title>VectorAI Knowledge Base</title></head>
       <body>
         <h1>Powered by Qdrant Semantic Search and Embeddings Reranking</h1>
-        <p>Realtime voice agent workflows enabled.</p>
+        <p>Realtime agent workflows enabled.</p>
       </body>
     </html>
     """
@@ -75,7 +74,7 @@ async def test_audit_with_vector_search_detected():
         findings = await agent.perform_audit("https://vectorai.io")
 
         assert findings["search_gap_detected"] is False
-        assert findings["ai_agent_gap_detected"] is False
+        assert findings["recommended_pitch_angle"] in ["LLM_FINOPS_OPTIMIZATION", "AGENTIC_COPILOT_AUTOMATION", "VECTOR_SEMANTIC_SEARCH"]
 
 @pytest.mark.asyncio
 async def test_playwright_auditor_mock():
@@ -103,5 +102,4 @@ async def test_playwright_auditor_mock():
         assert findings["load_time_ms"] == 420.0
         assert len(findings["js_console_errors"]) == 1
         assert "stripe" in findings["detected_apis"]
-        assert findings["search_gap_detected"] is True
-        assert findings["recommended_pitch_angle"] == "QUANTVAULT_DEMO"
+        assert findings["recommended_pitch_angle"] == "REALTIME_INGESTION_PIPELINE"

@@ -14,16 +14,30 @@ def test_acceptance_flow():
 
 def test_below_floor_negotiation_triggers_hitl():
     agent = NegotiationEngineAgent()
-    # Floor is 5000, prospect offers 2000
+    # Micro-floor is < 500, prospect offers 300
     res = agent.process_reply(
         lead_name="John Doe",
         company_name="Acme Corp",
-        incoming_reply="We only have a budget of $2000 for this project.",
+        incoming_reply="We only have a budget of $300 for this project.",
         current_quoted_rate=6500.0
     )
     assert res["stage"] == "HITL_HANDOVER"
     assert res["human_override_required"] is True
-    assert "below our hard floor" in res["override_reason"]
+    assert "below $500 micro-tier" in res["override_reason"]
+
+def test_sprint_mvp_tier_negotiation():
+    agent = NegotiationEngineAgent()
+    # Prospect offers $2,000 -> Never turns away, triggers Phase 1 Sprint MVP
+    res = agent.process_reply(
+        lead_name="Marcus Aurelius",
+        company_name="Rome AI",
+        incoming_reply="We have a budget of $2000 for this project.",
+        current_quoted_rate=6500.0
+    )
+    assert res["stage"] == "NEGOTIATING"
+    assert res["human_override_required"] is False
+    assert res["agreed_rate"] == 2000.0
+    assert "Phase 1 Sprint" in res["response_text"]
 
 def test_custom_contract_triggers_hitl():
     agent = NegotiationEngineAgent()
