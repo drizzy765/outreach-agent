@@ -4,8 +4,20 @@ from config import settings
 
 Base = declarative_base()
 
+def _normalize_db_url(url: str) -> str:
+    """Normalize database URL for SQLAlchemy asyncpg engine."""
+    if not url:
+        return "sqlite+aiosqlite:///./crm.db"
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+db_url = _normalize_db_url(settings.database_url)
+
 engine = create_async_engine(
-    settings.database_url,
+    db_url,
     echo=False,
     future=True,
     pool_pre_ping=True
