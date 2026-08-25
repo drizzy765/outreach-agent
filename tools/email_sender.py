@@ -90,10 +90,25 @@ class OutboundEmailSender:
 
         # 2. Live SMTP Dispatch
         try:
-            with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15) as server:
-                server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
+            is_gmail = "gmail" in (self.smtp_host or "").lower()
+            if self.smtp_port == 465 or is_gmail:
+                try:
+                    with smtplib.SMTP_SSL(self.smtp_host, 465, timeout=12) as server:
+                        server.login(self.smtp_user, self.smtp_password)
+                        server.send_message(msg)
+                except Exception as ssl_err:
+                    logger.debug(f"SMTP SSL 465 failed, trying STARTTLS {self.smtp_port}: {ssl_err}")
+                    with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=12) as server:
+                        server.ehlo()
+                        server.starttls()
+                        server.login(self.smtp_user, self.smtp_password)
+                        server.send_message(msg)
+            else:
+                with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=12) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
 
             self._sent_today_count += 1
             logger.info(f"Outbound email sent to {recipient_email} (MsgID: {msg_id})")

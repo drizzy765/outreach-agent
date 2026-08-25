@@ -4,22 +4,24 @@ import logging
 from typing import Dict, Any, Optional
 from tools.llm_router import LLMRouter
 
+from config import settings
+
 logger = logging.getLogger(__name__)
 
-PITCH_SYSTEM_PROMPT = """You are an elite AI Engineering Consultant & Principal Architect.
-You write hyper-personalized, value-first, problem-solving cold outreach emails to founders and CTOs.
+PITCH_SYSTEM_PROMPT = """You are an ambitious, high-agency AI/ML Engineer and recent graduate with proven hands-on project experience in FastAPI microservices, Qdrant vector retrieval, and LLM systems.
+You write hyper-personalized, technical, problem-solving cold outreach emails to founders and CTOs.
 
 Rules for outreach:
-1. Under 150 words. Zero fluff, zero generic sales buzzwords.
-2. Directly reference specific technical bottlenecks found during website diagnostic audit (TTFB latency, basic SQL keyword search, missing voice/telemetry agent).
-3. Offer an immediate tangible solution:
-   - Angle A (CUSTOM_ML_AUDIT): Decoupled FastAPI + Qdrant vector search microservice cutting latency by 60%.
-   - Angle B (QUANTVAULT_DEMO): QuantVault real-time WebRTC voice & risk telemetry command center.
-4. Output JSON strictly matching format:
+1. Under 150 words. Genuine, technical, polite, zero sales fluff or generic marketing jargon.
+2. Introduce yourself clearly as an AI/ML Engineer who analyzed their actual platform and spotted a concrete engineering opportunity (e.g. search relevance/latency or automated AI workflows).
+3. Propose a specific tailored solution (e.g. decoupled FastAPI + Qdrant vector search microservice or custom LLM pipeline) and include an architecture blueprint or snippet.
+4. Include your portfolio and resume links.
+5. Offer to build a working prototype or discuss over a brief 10-minute chat.
+6. Output JSON strictly matching format:
 {
-  "subject": "Compelling subject line",
-  "body": "Personalized email body",
-  "blueprint_snippet": "ASCII or architecture summary"
+  "subject": "Compelling, direct subject line",
+  "body": "Personalized email body with greeting, problem, proposed solution, links, and polite sign-off",
+  "blueprint_snippet": "Tailored ASCII architecture flow"
 }
 """
 
@@ -27,7 +29,7 @@ class ValueAddPitcherAgent:
     """
     Agent 4: Dynamic Free-Tier LLM Pitch & Blueprint Showcase Agent
     Synthesizes technical diagnostics into bespoke outreach using:
-    - Multi-provider free tier router (OpenRouter, Groq, NVIDIA NIM, Google Gemini, Ollama)
+    - Multi-provider free tier router (Groq, OpenRouter, NVIDIA NIM, Google Gemini)
     - Zero-token deterministic architecture synthesizer fallback
     """
 
@@ -51,18 +53,23 @@ class ValueAddPitcherAgent:
         ttfb = audit_findings.get("ttfb_ms", 180.0)
         load_time = audit_findings.get("load_time_ms", 350.0)
         detected_apis = ", ".join(audit_findings.get("detected_apis", [])) or "Postgres"
+        sender_name = getattr(settings, "sender_name", "Timilehin Agoro")
+        sender_title = getattr(settings, "sender_title", "AI / ML Engineer")
+        portfolio = getattr(settings, "sender_portfolio_url", "https://github.com/drizzy765")
+        resume = getattr(settings, "sender_resume_url", "https://linkedin.com/in/timilehin-agoro")
 
-        user_prompt = f"""Target Company: {company_name} ({website_url})
-Recipient: {first_name} ({lead_role or 'Founder'})
+        user_prompt = f"""Sender Profile: {sender_name}, {sender_title}
+Portfolio: {portfolio} | Resume: {resume}
+
+Target Company: {company_name} ({website_url})
+Recipient: {first_name} ({lead_role or 'Engineering Team'})
 Diagnostic Findings:
-- TTFB Latency: {ttfb}ms
-- Page Load Time: {load_time}ms
+- TTFB Latency: {ttfb}ms | Page Load Time: {load_time}ms
 - Detected Stack / APIs: {detected_apis}
 - Search Gap: {audit_findings.get('search_gap_detected', True)} ({audit_findings.get('search_diagnosis', 'SQL Substring')})
-- AI Voice/Telemetry Gap: {audit_findings.get('ai_agent_gap_detected', True)}
-- Pitch Angle: {chosen_angle}
+- AI / Automation Gap: {audit_findings.get('ai_agent_gap_detected', True)}
 
-Write the hyper-personalized pitch following the system rules. Return JSON only."""
+Write a concise, compelling technical pitch offering to build a working solution for {company_name}. Return JSON only."""
 
         # 1. Attempt LLM generation across free providers
         content, provider = await self.router.generate_completion(

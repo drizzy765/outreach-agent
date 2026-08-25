@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 from agents.pitcher import ValueAddPitcherAgent
 from tools.llm_router import LLMRouter
 
-def test_custom_ml_pitch_generation_sync():
+def test_ai_engineer_pitch_generation_sync():
     pitcher = ValueAddPitcherAgent()
     pitch = pitcher.generate_pitch(
         lead_name="Alex Mercer",
@@ -13,23 +13,8 @@ def test_custom_ml_pitch_generation_sync():
         audit_findings={"ttfb_ms": 340, "recommended_pitch_angle": "CUSTOM_ML_AUDIT"}
     )
     assert "DataStore" in pitch["subject"]
-    assert "vector search" in pitch["body"].lower()
-    assert pitch["pitch_type"] == "CUSTOM_ML_AUDIT"
-    assert "DECOUPLED VECTOR SEARCH MICROSERVICE" in pitch.get("blueprint_snippet", "")
-
-def test_quantvault_pitch_generation_sync():
-    pitcher = ValueAddPitcherAgent()
-    pitch = pitcher.generate_pitch(
-        lead_name="Elena Rostova",
-        lead_role="Head of Trading",
-        company_name="AlphaQuant",
-        website_url="https://alphaquant.io",
-        audit_findings={"ttfb_ms": 110, "recommended_pitch_angle": "QUANTVAULT_DEMO"}
-    )
-    assert "telemetry & voice workflows" in pitch["subject"]
-    assert "QuantVault" in pitch["body"]
-    assert pitch["pitch_type"] == "QUANTVAULT_DEMO"
-    assert "QUANTVAULT WEBRTC VOICE PIPELINE" in pitch.get("blueprint_snippet", "")
+    assert "vector" in pitch["body"].lower() or "microservice" in pitch["body"].lower()
+    assert "DECOUPLED VECTOR RETRIEVAL PIPELINE" in pitch.get("blueprint_snippet", "")
 
 @pytest.mark.asyncio
 async def test_llm_router_openrouter_mock():

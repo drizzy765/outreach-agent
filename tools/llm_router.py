@@ -26,33 +26,49 @@ class LLMRouter:
         """Construct ordered list of active providers based on available keys and defaults."""
         endpoints = []
 
-        # 1. OpenRouter Free Tier
-        if settings.openrouter_api_key:
-            endpoints.append({
-                "name": "openrouter",
-                "base_url": "https://openrouter.ai/api/v1/chat/completions",
-                "api_key": settings.openrouter_api_key,
-                "model": settings.default_free_model,
-                "headers": {
-                    "Authorization": f"Bearer {settings.openrouter_api_key}",
-                    "HTTP-Referer": "https://github.com/drizzy765/outreach-agent",
-                    "X-Title": "Autonomous Outreach Engine"
-                }
-            })
-
-        # 2. Groq Free Tier
+        # 1. Groq Free Tier (Ultra-fast, standard models)
         if settings.groq_api_key:
-            endpoints.append({
-                "name": "groq",
-                "base_url": "https://api.groq.com/openai/v1/chat/completions",
-                "api_key": settings.groq_api_key,
-                "model": settings.default_groq_model,
-                "headers": {
-                    "Authorization": f"Bearer {settings.groq_api_key}"
-                }
-            })
+            for model_name in [settings.default_groq_model, "llama-3.1-8b-instant", "llama-3.3-70b-versatile", "llama3-70b-8192"]:
+                endpoints.append({
+                    "name": f"groq ({model_name})",
+                    "base_url": "https://api.groq.com/openai/v1/chat/completions",
+                    "api_key": settings.groq_api_key,
+                    "model": model_name,
+                    "headers": {
+                        "Authorization": f"Bearer {settings.groq_api_key}"
+                    }
+                })
 
-        # 3. NVIDIA NIM Free Tier
+        # 2. OpenRouter Free Tier (Cascading active free models)
+        if settings.openrouter_api_key:
+            for model_name in [settings.default_free_model, "meta-llama/llama-3.1-8b-instruct:free", "qwen/qwen-2.5-coder-32b-instruct:free", "deepseek/deepseek-r1:free", "google/gemini-2.0-flash-exp:free"]:
+                endpoints.append({
+                    "name": f"openrouter ({model_name})",
+                    "base_url": "https://openrouter.ai/api/v1/chat/completions",
+                    "api_key": settings.openrouter_api_key,
+                    "model": model_name,
+                    "headers": {
+                        "Authorization": f"Bearer {settings.openrouter_api_key}",
+                        "HTTP-Referer": "https://github.com/drizzy765/outreach-agent",
+                        "X-Title": "Autonomous Outreach Engine"
+                    }
+                })
+
+        # 3. Google Gemini Free Tier
+        gemini_key = settings.google_api_key or settings.gemini_api_key
+        if gemini_key:
+            for model_name in [settings.default_gemini_model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]:
+                endpoints.append({
+                    "name": f"gemini ({model_name})",
+                    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                    "api_key": gemini_key,
+                    "model": model_name,
+                    "headers": {
+                        "Authorization": f"Bearer {gemini_key}"
+                    }
+                })
+
+        # 4. NVIDIA NIM Free Tier
         if settings.nvidia_api_key:
             endpoints.append({
                 "name": "nvidia",
@@ -64,33 +80,20 @@ class LLMRouter:
                 }
             })
 
-        # 4. Google Gemini OpenAI-compatible endpoint
-        gemini_key = settings.google_api_key or settings.gemini_api_key
-        if gemini_key:
-            endpoints.append({
-                "name": "gemini",
-                "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                "api_key": gemini_key,
-                "model": settings.default_gemini_model,
-                "headers": {
-                    "Authorization": f"Bearer {gemini_key}"
-                }
-            })
-
         # 5. Custom OpenAI-compatible Base URL
         if settings.custom_llm_base_url:
             endpoints.append({
                 "name": "custom",
                 "base_url": f"{settings.custom_llm_base_url.rstrip('/')}/chat/completions",
                 "api_key": settings.custom_llm_api_key or "sk-dummy",
-                "model": settings.default_model,
+                "model": "gpt-3.5-turbo",
                 "headers": {
                     "Authorization": f"Bearer {settings.custom_llm_api_key or 'sk-dummy'}"
                 }
             })
 
-        # 6. Local Ollama
-        if settings.ollama_base_url:
+        # 6. Local Ollama (only if configured)
+        if settings.ollama_base_url and settings.ollama_base_url.strip():
             endpoints.append({
                 "name": "ollama",
                 "base_url": f"{settings.ollama_base_url.rstrip('/')}/chat/completions",
@@ -134,9 +137,9 @@ class LLMRouter:
                         if choices:
                             content = choices[0].get("message", {}).get("content", "")
                             if content:
-                                return content, f"{ep['name']}:{ep['model']}"
+                                return content, f"{ep['name']}"
                     else:
-                        logger.warning(f"Provider {ep['name']} returned status {resp.status_code}: {resp.text[:120]}")
+                        logger.debug(f"Provider {ep['name']} returned status {resp.status_code}: {resp.text[:100]}")
             except Exception as e:
                 logger.debug(f"Provider {ep['name']} failed, cascading: {e}")
                 continue
@@ -151,83 +154,64 @@ class LLMRouter:
         company_name: str,
         website_url: str,
         audit_findings: Dict[str, Any],
-        pitch_angle: str
+        pitch_angle: str = "CUSTOM_ML_AUDIT"
     ) -> Dict[str, str]:
         """
         Intelligent offline synthesizer.
-        Dynamically crafts bespoke pitches with exact metrics and architecture blueprints without API tokens.
+        Positions the sender as an AI/ML Engineer proposing a bespoke technical solution.
         """
         first_name = lead_name.split()[0] if lead_name and lead_name != "Founder" else "there"
-        role_title = lead_role if lead_role else "Engineering Leadership"
         ttfb = audit_findings.get("ttfb_ms", 180.0)
         load_time = audit_findings.get("load_time_ms", 350.0)
-        detected_apis = ", ".join(audit_findings.get("detected_apis", [])) or "Postgres / Next.js"
-        search_gap = audit_findings.get("search_gap_detected", True)
+        detected_apis = ", ".join(audit_findings.get("detected_apis", [])) or "Modern Web Stack"
+        search_diagnosis = audit_findings.get("search_diagnosis", "Standard Keyword Matching")
 
-        if pitch_angle == "QUANTVAULT_DEMO":
-            subject = f"Quick question regarding {company_name}'s telemetry & voice workflows"
-            blueprint = f"""
+        sender_name = getattr(settings, "sender_name", "Timilehin Agoro")
+        sender_title = getattr(settings, "sender_title", "AI / ML Engineer")
+        portfolio_url = getattr(settings, "sender_portfolio_url", "https://github.com/drizzy765")
+        resume_url = getattr(settings, "sender_resume_url", "https://linkedin.com/in/timilehin-agoro")
+
+        subject = f"Engineered solution for {company_name}'s search & latency architecture"
+        blueprint = f"""
 ┌────────────────────────────────────────────────────────┐
-│             QUANTVAULT WEBRTC VOICE PIPELINE           │
+│            DECOUPLED VECTOR RETRIEVAL PIPELINE         │
 │                                                        │
-│  [User Voice / Telemetry] ──► [WebRTC Audio Stream]    │
-│                                        │               │
-│                                        ▼               │
-│  [Real-Time Risk Alerts] ◄── [QuantVault Telemetry]    │
-│   (<180ms Latency SLA)        (Async Sub-200ms Core)   │
-└────────────────────────────────────────────────────────┘
-"""
-            body = f"""Hi {first_name},
-
-I took a deep dive into {company_name}'s analytics platform ({website_url}) and was impressed by your market positioning in quantitative telemetry.
-
-While analyzing your user interaction pipeline (load time: ~{load_time}ms), I noticed your platform currently lacks a low-latency agentic voice command interface for real-time risk querying.
-
-I recently built QuantVault — an open-architecture agent that connects directly to analytics streams, enabling sub-200ms natural voice querying and automated telemetry alerts.
-
-Here is a 15-second interactive demonstration showing how it plugs into stacks like {company_name}:
-👉 https://quantvault-demo.io/showcase
-
-{blueprint}
-
-Would you be open to a brief 10-minute chat next Tuesday at 2 PM to explore whether this could elevate engagement for {company_name}'s users?
-
-Best regards,
-Autonomous Outreach Engine
-"""
-        else: # CUSTOM_ML_AUDIT
-            subject = f"Technical audit findings & vector search latency on {company_name}"
-            blueprint = f"""
-┌────────────────────────────────────────────────────────┐
-│            DECOUPLED VECTOR SEARCH MICROSERVICE        │
-│                                                        │
-│  [Client App] ──► [FastAPI Middleware] ──► [Qdrant]    │
+│  [Client App] ──► [FastAPI Async Core] ──► [Qdrant]    │
 │                        │ (Semantic Rerank)     │       │
 │                        ▼                       ▼       │
-│               [Postgres Core DB] ◄── [Embedding Cache] │
-│               (Zero Schema Impact)   (<60ms Latency)   │
+│               [Primary DB] ◄── [Embedding Cache Layer] │
+│               (Zero Downtime)     (<45ms Query Latency)│
 └────────────────────────────────────────────────────────┘
 """
-            body = f"""Hi {first_name},
+        body = f"""Hi {first_name},
 
-I ran a performance diagnostic on {company_name} ({website_url}) and noticed an engineering opportunity: your search engine relies on basic keyword matching with an average query TTFB of ~{ttfb}ms ({detected_apis}).
+I’m {sender_name}, a recent AI/ML engineering graduate. I’ve been following {company_name} ({website_url}) and recently built production projects around high-performance vector retrieval and LLM agents.
 
-I specialize in building decoupled FastAPI + Qdrant vector search microservices that implement semantic reranking and cut search latency by over 60% with zero downtime to your existing database.
+I ran a quick technical diagnostic on {company_name} and noticed a high-impact engineering opportunity:
+• Query latency / TTFB is around ~{ttfb}ms ({detected_apis}).
+• Current search relies on {search_diagnosis}, which could be upgraded to semantic embeddings for much higher user conversion.
 
-Here is a tailored architecture blueprint designed specifically for {company_name}:
+To demonstrate how this would work on your stack, I drafted a lightweight, decoupled microservice blueprint designed to cut search response times and deliver instant semantic relevance:
 
 {blueprint}
 
-Are you free for a brief 10-minute chat this Thursday to discuss whether implementing this makes sense for your engineering roadmap?
+I would love the opportunity to prove my skills and build this working prototype for {company_name}. 
+
+You can check out my projects and background here:
+• Portfolio / GitHub: {portfolio_url}
+• Resume / LinkedIn: {resume_url}
+
+Would you be open to a quick 10-minute chat this week to see the prototype in action?
 
 Best regards,
-Autonomous Outreach Engine
+{sender_name}
+{sender_title}
 """
 
         return {
             "subject": subject,
             "body": body,
             "blueprint_snippet": blueprint.strip(),
-            "pitch_type": pitch_angle,
+            "pitch_type": "AI_ENGINEER_SOLUTION",
             "provider_used": "deterministic_offline_synthesizer"
         }

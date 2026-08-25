@@ -36,8 +36,19 @@ class NegotiationEngineAgent:
     def extract_counter_offer(self, reply_text: str) -> Tuple[str, float]:
         """Extract pricing intent and any proposed dollar amounts or discount requests from message."""
         text = reply_text.lower()
-        amount_match = re.search(r'\$(\d+(?:,\d+)*(?:\.\d+)?)', text)
-        proposed_amount = float(amount_match.group(1).replace(',', '')) if amount_match else 0.0
+        
+        # Match dollar formats: $4,000, $4000, 4,000, 4000, 4k, 500/mo, etc.
+        amount_match = re.search(r'\$\s*(\d+(?:,\d+)*(?:\.\d+)?)|(?:\b|\s)(\d{1,3}(?:,\d{3})+(?:\.\d+)?)|(?:\b|\s)(\d{3,6})(?:\.\d+)?(?:\s|$|usd|\b)|(?:\b|\s)(\d+)\s*k\b', text)
+        proposed_amount = 0.0
+        if amount_match:
+            if amount_match.group(1):
+                proposed_amount = float(amount_match.group(1).replace(',', ''))
+            elif amount_match.group(2):
+                proposed_amount = float(amount_match.group(2).replace(',', ''))
+            elif amount_match.group(3):
+                proposed_amount = float(amount_match.group(3))
+            elif amount_match.group(4):
+                proposed_amount = float(amount_match.group(4)) * 1000.0
 
         percent_match = re.search(r'(\d+)\s*%\s*(?:discount|off|lower)', text)
         discount_percent = float(percent_match.group(1)) if percent_match else 0.0
@@ -71,6 +82,7 @@ class NegotiationEngineAgent:
         """
         intent, figure = self.extract_counter_offer(incoming_reply)
         first_name = lead_name.split()[0] if lead_name and lead_name != "Founder" else "there"
+        sender_name = getattr(settings, "sender_name", "Timilehin Agoro")
 
         # 1. Direct Acceptance -> Closed Won
         if intent == "ACCEPTANCE":
@@ -81,11 +93,10 @@ class NegotiationEngineAgent:
                 "agreed_rate": current_quoted_rate,
                 "response_text": (
                     f"Hi {first_name},\n\n"
-                    f"Fantastic! I am thrilled to partner with {company_name}. "
-                    f"I have prepared the standard statement of work at ${current_quoted_rate:,.2f} "
-                    f"with our standard milestone structure ({self.milestone_terms}).\n\n"
-                    "You can view and execute the onboarding doc here: https://outreach-engine.io/onboarding\n\n"
-                    "Looking forward to kicking this off!"
+                    f"Fantastic! I am thrilled to build this for {company_name}. "
+                    f"I have prepared the project scope at ${current_quoted_rate:,.2f} "
+                    f"with milestone terms ({self.milestone_terms}).\n\n"
+                    "Let's schedule our kickoff call to align on repository access and deliverables."
                 )
             }
 
@@ -98,7 +109,7 @@ class NegotiationEngineAgent:
                 "agreed_rate": None,
                 "response_text": (
                     f"Hi {first_name},\n\n"
-                    "Thanks for clarifying. Our team is reviewing the agreement requirements and will get back to you with the adjusted paperwork shortly."
+                    "Thanks for clarifying. I am reviewing the contract requirements and will get back to you with the adjusted paperwork shortly."
                 )
             }
 
@@ -107,11 +118,11 @@ class NegotiationEngineAgent:
             return {
                 "stage": "HITL_HANDOVER",
                 "human_override_required": True,
-                "override_reason": "Prospect requested out-of-scope development beyond microservice/audit specifications.",
+                "override_reason": "Prospect requested out-of-scope development beyond microservice specifications.",
                 "agreed_rate": None,
                 "response_text": (
                     f"Hi {first_name},\n\n"
-                    "That sounds like an intriguing expansion. Let me review the scope details and put together an accurate milestone roadmap for you."
+                    "That sounds like an interesting roadmap expansion. Let me review the scope details and put together an accurate milestone roadmap for you."
                 )
             }
 
@@ -129,8 +140,8 @@ class NegotiationEngineAgent:
                     "agreed_rate": None,
                     "response_text": (
                         f"Hi {first_name},\n\n"
-                        f"Thank you for the proposal. To maintain engineering quality and SLA guarantees, our standard minimum engagement floor is ${floor:,.2f}. "
-                        "I am checking with our lead architect to see if we can tailor a phased scope that fits your target budget."
+                        f"Thank you for the proposal. To ensure high engineering quality, dedicated focus, and end-to-end integration, my standard project floor is ${floor:,.2f} ({self.milestone_terms}).\n\n"
+                        "Would you be open to adjusting the initial scope so we can meet within your budget?"
                     )
                 }
             else:
@@ -143,7 +154,7 @@ class NegotiationEngineAgent:
                     "agreed_rate": discounted_rate,
                     "response_text": (
                         f"Hi {first_name},\n\n"
-                        f"I understand budget constraints. If we can finalize the agreement this week, I can offer an adjusted rate of ${discounted_rate:,.2f} "
+                        f"I understand budget constraints. If we kick off this week, I can offer an adjusted project fee of ${discounted_rate:,.2f} "
                         f"under our standard milestone terms ({self.milestone_terms}).\n\n"
                         "Does that work for your team?"
                     )
@@ -158,9 +169,9 @@ class NegotiationEngineAgent:
                 "agreed_rate": current_quoted_rate,
                 "response_text": (
                     f"Hi {first_name},\n\n"
-                    "Great question. Our architecture runs as a standalone containerized service with zero changes to your core database schema. "
-                    "We ingest events asynchronously and maintain a 99.9% uptime SLA with <100ms vector lookup latency.\n\n"
-                    "Would you like to hop on a quick 10-minute demo this week to review the telemetry graphs?"
+                    "Great question. The solution runs as a decoupled async FastAPI service with zero changes to your core database schema. "
+                    "It integrates directly with your existing APIs and achieves <45ms vector search lookup times.\n\n"
+                    "Would you like to hop on a quick 10-minute demo this week to review the prototype?"
                 )
             }
 

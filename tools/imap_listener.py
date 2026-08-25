@@ -11,11 +11,18 @@ def _decode_str(header_value: Optional[str]) -> str:
     """Decode encoded MIME header strings safely."""
     if not header_value:
         return ""
-    decoded_parts = decode_header(header_value)
+    try:
+        decoded_parts = decode_header(header_value)
+    except Exception:
+        return str(header_value)
     result = ""
     for text, encoding in decoded_parts:
         if isinstance(text, bytes):
-            result += text.decode(encoding or "utf-8", errors="ignore")
+            try:
+                enc = encoding or "utf-8"
+                result += text.decode(enc, errors="ignore")
+            except (LookupError, UnicodeDecodeError):
+                result += text.decode("utf-8", errors="ignore")
         else:
             result += str(text)
     return result

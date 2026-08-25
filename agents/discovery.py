@@ -238,31 +238,34 @@ class ProspectDiscoveryAgent:
     async def register_prospects(self, prospects: List[Dict[str, Any]]) -> List[ProspectCompany]:
         """Save newly discovered companies into CRM database with URL normalization and deduplication."""
         saved_companies = []
-        async with AsyncSessionLocal() as session:
-            for p in prospects:
-                raw_url = p.get("website_url", "")
-                norm_url = normalize_domain_url(raw_url)
-                if not norm_url:
-                    continue
+        try:
+            async with AsyncSessionLocal() as session:
+                for p in prospects:
+                    raw_url = p.get("website_url", "")
+                    norm_url = normalize_domain_url(raw_url)
+                    if not norm_url:
+                        continue
 
-                # Check if exists
-                stmt = select(ProspectCompany).where(ProspectCompany.website_url == norm_url)
-                res = await session.execute(stmt)
-                existing = res.scalar_one_or_none()
+                    # Check if exists
+                    stmt = select(ProspectCompany).where(ProspectCompany.website_url == norm_url)
+                    res = await session.execute(stmt)
+                    existing = res.scalar_one_or_none()
 
-                if not existing:
-                    company = ProspectCompany(
-                        company_name=p.get("company_name", "Target Startup"),
-                        website_url=norm_url,
-                        industry=p.get("industry", "Technology"),
-                        tech_stack_detected={"description": p.get("description", ""), "source": p.get("source", "manual")},
-                        audit_findings={}
-                    )
-                    session.add(company)
-                    await session.commit()
-                    await session.refresh(company)
-                    saved_companies.append(company)
-                else:
-                    saved_companies.append(existing)
+                    if not existing:
+                        company = ProspectCompany(
+                            company_name=p.get("company_name", "Target Startup"),
+                            website_url=norm_url,
+                            industry=p.get("industry", "Technology"),
+                            tech_stack_detected={"description": p.get("description", ""), "source": p.get("source", "manual")},
+                            audit_findings={}
+                        )
+                        session.add(company)
+                        await session.commit()
+                        await session.refresh(company)
+                        saved_companies.append(company)
+                    else:
+                        saved_companies.append(existing)
+        except Exception as e:
+            logger.warning(f"CRM database registration skipped (DB offline or connection issue): {e}")
         return saved_companies
 

@@ -48,15 +48,18 @@ async def node_technical_audit(state: OutreachState) -> Dict[str, Any]:
     url = state["target_url"]
     findings = await audit_agent.perform_audit(url)
     
-    # Update company audit in CRM
+    # Update company audit in CRM if available
     if state.get("company_id"):
-        async with AsyncSessionLocal() as session:
-            stmt = select(ProspectCompany).where(ProspectCompany.id == state["company_id"])
-            res = await session.execute(stmt)
-            comp = res.scalar_one_or_none()
-            if comp:
-                comp.audit_findings = findings
-                await session.commit()
+        try:
+            async with AsyncSessionLocal() as session:
+                stmt = select(ProspectCompany).where(ProspectCompany.id == state["company_id"])
+                res = await session.execute(stmt)
+                comp = res.scalar_one_or_none()
+                if comp:
+                    comp.audit_findings = findings
+                    await session.commit()
+        except Exception as e:
+            logger.debug(f"Audit CRM update skipped: {e}")
 
     return {
         "audit_findings": findings,
@@ -98,18 +101,21 @@ async def node_pitch_generator(state: OutreachState) -> Dict[str, Any]:
 
     conv_id = None
     if state.get("primary_lead_id"):
-        async with AsyncSessionLocal() as session:
-            conv = OutreachConversation(
-                lead_id=state["primary_lead_id"],
-                pitch_type=pitch["pitch_type"],
-                stage="DRAFTED",
-                last_message_content=pitch["body"],
-                minimum_acceptable_rate=150.00
-            )
-            session.add(conv)
-            await session.commit()
-            await session.refresh(conv)
-            conv_id = str(conv.id)
+        try:
+            async with AsyncSessionLocal() as session:
+                conv = OutreachConversation(
+                    lead_id=state["primary_lead_id"],
+                    pitch_type=pitch["pitch_type"],
+                    stage="DRAFTED",
+                    last_message_content=pitch["body"],
+                    minimum_acceptable_rate=150.00
+                )
+                session.add(conv)
+                await session.commit()
+                await session.refresh(conv)
+                conv_id = str(conv.id)
+        except Exception as e:
+            logger.debug(f"Outreach conversation CRM save skipped: {e}")
 
     return {
         "pitch_subject": pitch["subject"],

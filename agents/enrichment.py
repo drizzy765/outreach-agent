@@ -89,43 +89,47 @@ class LeadEnrichmentAgent:
                 "verification_status": ver_res["status"]
             })
 
-        # 4. Save/update to database if company_id is provided
+        # 4. Save/update to database if company_id is provided and DB is online
         saved_leads: List[Dict[str, Any]] = []
         if company_id:
-            async with AsyncSessionLocal() as session:
-                for lead in discovered_leads:
-                    stmt = select(ProspectLead).where(ProspectLead.email == lead["email"])
-                    res = await session.execute(stmt)
-                    existing = res.scalar_one_or_none()
+            try:
+                async with AsyncSessionLocal() as session:
+                    for lead in discovered_leads:
+                        stmt = select(ProspectLead).where(ProspectLead.email == lead["email"])
+                        res = await session.execute(stmt)
+                        existing = res.scalar_one_or_none()
 
-                    if not existing:
-                        new_lead = ProspectLead(
-                            company_id=company_id,
-                            full_name=lead["full_name"],
-                            role=lead["role"],
-                            email=lead["email"],
-                            verification_status=lead["verification_status"]
-                        )
-                        session.add(new_lead)
-                        await session.commit()
-                        await session.refresh(new_lead)
-                        saved_leads.append({
-                            "id": str(new_lead.id),
-                            "company_id": str(new_lead.company_id),
-                            "full_name": new_lead.full_name,
-                            "role": new_lead.role,
-                            "email": new_lead.email,
-                            "verification_status": new_lead.verification_status
-                        })
-                    else:
-                        saved_leads.append({
-                            "id": str(existing.id),
-                            "company_id": str(existing.company_id),
-                            "full_name": existing.full_name,
-                            "role": existing.role,
-                            "email": existing.email,
-                            "verification_status": existing.verification_status
-                        })
+                        if not existing:
+                            new_lead = ProspectLead(
+                                company_id=company_id,
+                                full_name=lead["full_name"],
+                                role=lead["role"],
+                                email=lead["email"],
+                                verification_status=lead["verification_status"]
+                            )
+                            session.add(new_lead)
+                            await session.commit()
+                            await session.refresh(new_lead)
+                            saved_leads.append({
+                                "id": str(new_lead.id),
+                                "company_id": str(new_lead.company_id),
+                                "full_name": new_lead.full_name,
+                                "role": new_lead.role,
+                                "email": new_lead.email,
+                                "verification_status": new_lead.verification_status
+                            })
+                        else:
+                            saved_leads.append({
+                                "id": str(existing.id),
+                                "company_id": str(existing.company_id),
+                                "full_name": existing.full_name,
+                                "role": existing.role,
+                                "email": existing.email,
+                                "verification_status": existing.verification_status
+                            })
+            except Exception as e:
+                logger.warning(f"CRM lead database save skipped: {e}")
+                saved_leads = discovered_leads
         else:
             saved_leads = discovered_leads
 

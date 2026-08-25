@@ -24,11 +24,17 @@ class Settings(BaseSettings):
     anthropic_api_key: Optional[str] = None
 
     # Routing preferences
-    default_llm_provider: str = "openrouter"
-    default_free_model: str = "meta-llama/llama-3.3-70b-instruct:free"
-    default_groq_model: str = "llama-3.3-70b-versatile"
+    default_llm_provider: str = "groq"
+    default_free_model: str = "meta-llama/llama-3.1-8b-instruct:free"
+    default_groq_model: str = "llama-3.1-8b-instant"
     default_nvidia_model: str = "meta/llama-3.3-70b-instruct"
-    default_gemini_model: str = "gemini-2.0-flash"
+    default_gemini_model: str = "gemini-1.5-flash"
+
+    # Sender Profile (AI/ML Engineer)
+    sender_name: str = "Timilehin Agoro"
+    sender_title: str = "AI / ML Engineer"
+    sender_resume_url: Optional[str] = "https://linkedin.com/in/timilehin-agoro"
+    sender_portfolio_url: Optional[str] = "https://github.com/drizzy765"
 
     # Telegram Bot
     telegram_bot_token: Optional[str] = None

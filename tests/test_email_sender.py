@@ -6,6 +6,8 @@ from tools.imap_listener import InboundIMAPListener
 @pytest.mark.asyncio
 async def test_email_sender_dry_run_dispatch():
     sender = OutboundEmailSender()
+    sender.smtp_user = None
+    sender.smtp_password = None
     res = await sender.send_email(
         recipient_email="founder@target-company.io",
         subject="Technical Audit Findings",

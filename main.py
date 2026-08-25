@@ -17,6 +17,10 @@ from agents.pitcher import ValueAddPitcherAgent
 from agents.negotiation import NegotiationEngineAgent
 
 
+import sys
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 app = typer.Typer(help="Autonomous Multi-Agent Outreach Engine CLI")
 console = Console()
 
@@ -36,11 +40,23 @@ def run(
     """Execute end-to-end multi-agent pipeline for a prospect."""
     console.print(Panel(f"🚀 Running Autonomous Outreach Pipeline for [bold cyan]{name}[/bold cyan] ({url})", style="bold blue"))
     
-    # Initialize DB schema if needed
-    asyncio.run(init_db())
-    
-    # Run LangGraph pipeline
-    result = asyncio.run(run_autonomous_outreach_pipeline(target_url=url, company_name=name, incoming_reply=reply))
+    async def _execute_pipeline():
+        try:
+            await init_db()
+        except Exception:
+            pass
+        try:
+            return await run_autonomous_outreach_pipeline(target_url=url, company_name=name, incoming_reply=reply)
+        finally:
+            try:
+                from database.connection import engine
+                await engine.dispose()
+                await asyncio.sleep(0.05)
+            except Exception:
+                pass
+
+    # Run LangGraph pipeline within single event loop
+    result = asyncio.run(_execute_pipeline())
 
     # Print Results Table
     table = Table(title="Pipeline Execution Summary", show_header=True, header_style="bold magenta")
@@ -208,20 +224,21 @@ def pitch(
     """Generate hyper-personalized value-add pitch and tailored architecture blueprint."""
     console.print(Panel(f"✍️ Generating AI Pitch for [bold cyan]{name}[/bold cyan] ({url})", style="bold yellow"))
     
-    # 1. Quick diagnostic
-    audit_agent = TechnicalAuditAgent(enable_playwright=False)
-    findings = asyncio.run(audit_agent.perform_audit(url))
+    async def _execute_pitch():
+        audit_agent = TechnicalAuditAgent(enable_playwright=False)
+        findings = await audit_agent.perform_audit(url)
+        pitcher = ValueAddPitcherAgent()
+        draft = await pitcher.generate_pitch_async(
+            lead_name=lead,
+            lead_role=role,
+            company_name=name,
+            website_url=url,
+            audit_findings=findings,
+            pitch_angle=angle
+        )
+        return draft
 
-    # 2. Pitch generation via Free-Tier LLM Router
-    pitcher = ValueAddPitcherAgent()
-    draft = asyncio.run(pitcher.generate_pitch_async(
-        lead_name=lead,
-        lead_role=role,
-        company_name=name,
-        website_url=url,
-        audit_findings=findings,
-        pitch_angle=angle
-    ))
+    draft = asyncio.run(_execute_pitch())
 
     console.print(f"\n[bold green]Model / Provider Used:[/bold green] [cyan]{draft.get('provider_used')}[/cyan]")
     console.print(f"[bold green]Pitch Angle:[/bold green] [yellow]{draft.get('pitch_type')}[/yellow]")
