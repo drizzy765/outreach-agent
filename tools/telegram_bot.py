@@ -327,6 +327,7 @@ class TelegramBotHandler:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url, params=params)
                 if resp.status_code != 200:
+                    logger.warning(f"[Telegram Poller] getUpdates failed (HTTP {resp.status_code}): {resp.text}")
                     return [], offset
 
                 data = resp.json()
