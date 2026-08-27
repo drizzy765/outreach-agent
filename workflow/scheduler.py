@@ -103,16 +103,82 @@ class AutonomousOutreachScheduler:
 
         return results
 
-    async def run_discovery_job(self, limit_per_source: int = 5) -> List[Dict[str, Any]]:
-        """Execute scheduled multi-source prospect discovery."""
+    async def run_pending_outreach_job(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Scan CRM for registered companies without sent outreach and autonomously audit, pitch, and dispatch emails."""
+        logger.info(f"[Scheduler] Running Autonomous Pitching on Pending Prospects (Limit: {limit})...")
+        from workflow.graph import run_autonomous_outreach_pipeline
+
+        dispatched = []
+        async with AsyncSessionLocal() as session:
+            try:
+                # Find companies that have no conversations in SENT, REPLIED, or CLOSED stages
+                stmt = select(ProspectCompany).order_by(ProspectCompany.discovered_at.desc()).limit(limit * 3)
+                res = await session.execute(stmt)
+                companies = res.scalars().all()
+
+                for comp in companies:
+                    if len(dispatched) >= limit:
+                        break
+
+                    # Check if already pitched
+                    conv_stmt = (
+                        select(OutreachConversation)
+                        .join(ProspectLead, OutreachConversation.lead_id == ProspectLead.id)
+                        .where(
+                            ProspectLead.company_id == comp.id,
+                            OutreachConversation.stage.in_(["SENT", "REPLIED", "NEGOTIATING", "COUNTER_OFFERED", "CLOSED_WON", "FOLLOWED_UP"])
+                        )
+                    )
+                    conv_res = await session.execute(conv_stmt)
+                    existing_conv = conv_res.first()
+
+                    if existing_conv:
+                        continue
+
+                    logger.info(f"[Scheduler] Autonomously executing pipeline for {comp.company_name} ({comp.website_url})...")
+                    result = await run_autonomous_outreach_pipeline(
+                        target_url=comp.website_url,
+                        company_name=comp.company_name,
+                        auto_send=settings.auto_send_outreach
+                    )
+
+                    dispatched.append({
+                        "company_id": str(comp.id),
+                        "company_name": comp.company_name,
+                        "website_url": comp.website_url,
+                        "lead_email": result.get("primary_lead_email"),
+                        "dispatch_status": result.get("email_dispatch_status"),
+                        "stage": result.get("negotiation_stage")
+                    })
+
+                    # Small polite async delay between company dispatches
+                    await asyncio.sleep(0.5)
+
+            except Exception as e:
+                logger.error(f"[Scheduler] Error running pending outreach job: {e}")
+
+        logger.info(f"[Scheduler] Autonomous outreach completed: dispatched {len(dispatched)} emails.")
+        return dispatched
+
+    async def run_discovery_job(self, limit_per_source: int = 5, auto_pitch: bool = True) -> List[Dict[str, Any]]:
+        """Execute scheduled multi-source prospect discovery and immediately pitch worthy candidates."""
         logger.info(f"[Scheduler] Running Multi-Source Discovery Job (Limit: {limit_per_source})...")
         prospects = await self.discovery_agent.discover_multi_source(limit_per_source=limit_per_source)
         if prospects:
             saved = await self.discovery_agent.register_prospects(prospects)
             logger.info(f"[Scheduler] Registered {len(saved)} new prospects to CRM.")
-            await send_telegram_alert(
-                f"🔍 *Scheduled Discovery Completed:*\nFound and registered *{len(saved)}* new companies to CRM."
-            )
+
+            # Autonomously audit, pitch, and dispatch to top worthy candidates
+            dispatched = []
+            if auto_pitch and settings.auto_send_outreach:
+                dispatched = await self.run_pending_outreach_job(limit=settings.max_auto_pitches_per_discovery_cycle)
+
+            if getattr(settings, "alert_on_outbound_send", False):
+                await send_telegram_alert(
+                    f"🔍 *Scheduled Discovery & Outreach Completed:*\n"
+                    f"• Found & registered *{len(saved)}* new companies to CRM.\n"
+                    f"• Autonomously pitched & dispatched outreach to *{len(dispatched)}* qualified leads."
+                )
             return prospects
         return []
 
@@ -146,6 +212,14 @@ class AutonomousOutreachScheduler:
                     "Best,\nAI Engineering Team"
                 )
 
+                # Send outbound follow-up email
+                send_res = await self.email_sender.send_email(
+                    recipient_email=lead.email,
+                    subject=bump_subject,
+                    body_text=bump_body,
+                    conversation_id=str(conv.id)
+                )
+
                 # Update conversation stage to FOLLOWED_UP
                 conv.stage = "FOLLOWED_UP"
                 conv.last_message_content = bump_body
@@ -156,17 +230,19 @@ class AutonomousOutreachScheduler:
                     "conversation_id": str(conv.id),
                     "lead_email": lead.email,
                     "company": comp_name,
-                    "status": "FOLLOWED_UP"
+                    "status": "FOLLOWED_UP",
+                    "delivery_status": send_res.get("status")
                 })
 
-                logger.info(f"[Scheduler] Follow-up bump generated for {lead.email} ({comp_name})")
+                logger.info(f"[Scheduler] Follow-up bump dispatched for {lead.email} ({comp_name}) - Status: {send_res.get('status')}")
 
-        if followups_triggered:
+        if followups_triggered and getattr(settings, "alert_on_outbound_send", False):
             await send_telegram_alert(
                 f"📬 *Follow-up Sequence Triggered:*\nBumped *{len(followups_triggered)}* stale prospect conversations."
             )
 
         return followups_triggered
+
 
 
     async def poll_telegram_step(self) -> List[Dict[str, Any]]:

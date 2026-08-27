@@ -63,11 +63,17 @@ class Settings(BaseSettings):
     # Invoicing & Webhooks
     invoicing_webhook_url: Optional[str] = None
 
+    # Autonomous Outbound Sending & Autopilot
+    auto_send_outreach: bool = True
+    max_auto_pitches_per_discovery_cycle: int = 5
+    alert_on_outbound_send: bool = False
+
     # Background Scheduler
     scheduler_discovery_interval_hours: int = 24
     scheduler_inbox_interval_minutes: int = 15
     scheduler_followup_days_threshold: int = 3
 
 settings = Settings()
+
 
 

@@ -33,5 +33,12 @@ class OutreachState(TypedDict):
     human_override_required: bool
     override_reason: Optional[str]
 
+    # Autonomous Outbound Dispatch
+    email_dispatch_status: Optional[str] # SENT, DRY_RUN_SENT, SKIPPED, FAILED, DAILY_LIMIT_EXCEEDED
+    email_message_id: Optional[str]
+    is_worthy_prospect: bool
+    auto_send: bool
+
     # Status
     errors: List[str]
+

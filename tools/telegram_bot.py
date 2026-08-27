@@ -216,21 +216,24 @@ class TelegramBotHandler:
         if cmd in ["/start", "/help"]:
             return (
                 "👋 *Welcome to Autonomous Outreach Command Center 2.0*\n\n"
-                "You can control your outreach agent remotely using these commands:\n\n"
+                "The agent runs in *Full Autopilot Mode* — it discovers, audits, extracts emails, and sends pitches to worthy companies autonomously. It only reaches back to you when a prospect replies, negotiates, or closes a deal!\n\n"
+                "⚡ *Available Commands:*\n\n"
+                "✍️ `/pitch <url>` — e.g. `/pitch https://docs.copilotkit.ai`\n"
+                "Runs technical diagnostics, discovers CTO/founder email, drafts pitch, and *directly dispatches outreach email*.\n\n"
                 "🔍 `/find <niche>` — e.g. `/find AI video startups`\n"
                 "Scrapes YC, ProductHunt, & GitHub for qualified prospect companies.\n\n"
-                "✍️ `/pitch <url>` — e.g. `/pitch https://docs.copilotkit.ai`\n"
-                "Runs live technical diagnostics and drafts a bespoke engineering pitch.\n\n"
-                "📢 `/campaign <product_desc> to <target_niche>`\n"
-                "Launches a custom prompt outreach campaign for any product or idea.\n\n"
+                "🚀 `/autopitch <niche>` — e.g. `/autopitch devtools`\n"
+                "Finds top prospects in niche and autonomously audits, drafts, and sends emails.\n\n"
                 "📊 `/stats` — Displays real-time CRM pipeline and revenue metrics.\n\n"
-                "⚡ *Tip:* When a client negotiates or asks a question, you will receive 1-tap action buttons right here."
+                "📬 `/queue` — Shows recent outreach dispatches and active conversations.\n\n"
+                "💡 *Response Alerting:* When a prospect replies or negotiates rates, you will receive instant 1-tap action buttons right here."
             )
 
         elif cmd == "/stats":
             leads_count = 0
             convs_count = 0
             won_count = 0
+            sent_count = 0
             try:
                 async with AsyncSessionLocal() as session:
                     res_leads = await session.execute(select(ProspectLead))
@@ -238,6 +241,7 @@ class TelegramBotHandler:
                     res_convs = await session.execute(select(OutreachConversation))
                     convs = res_convs.scalars().all()
                     convs_count = len(convs)
+                    sent_count = len([c for c in convs if c.stage in ("SENT", "FOLLOWED_UP")])
                     won_count = len([c for c in convs if c.stage == "CLOSED_WON"])
             except Exception:
                 pass
@@ -245,9 +249,11 @@ class TelegramBotHandler:
             return (
                 "📊 *CRM Pipeline Dashboard:*\n\n"
                 f"👥 *Total Qualified Leads:* {leads_count}\n"
+                f"📤 *Outbound Pitches Sent:* {sent_count}\n"
                 f"💬 *Active Conversations:* {convs_count}\n"
                 f"🏆 *Deals Closed Won:* {won_count}\n"
-                f"⚡ *System Health:* All Agent Microservices Operational"
+                f"⚡ *Autopilot Sending:* `{'ENABLED' if settings.auto_send_outreach else 'DISABLED'}`\n"
+                f"🛡️ *System Health:* All Agent Microservices Operational"
             )
 
         elif cmd == "/find":
@@ -263,42 +269,95 @@ class TelegramBotHandler:
                 return (
                     f"✅ *Found {len(prospects)} Qualified Prospects for '{niche}':*\n\n" +
                     "\n".join(lines) +
-                    f"\n\n👉 Type `/pitch <url>` to draft a pitch for any of them."
+                    f"\n\n👉 Type `/pitch <url>` to pitch any company, or `/autopitch {niche}` to auto-send outreach to all."
                 )
             except Exception as e:
                 return f"⚠️ Discovery scan encountered an error: {e}"
 
-        elif cmd == "/pitch":
+        elif cmd in ["/pitch", "/pitch_now"]:
             target_url = args
             if not target_url:
                 return "⚠️ Please provide a URL. Example: `/pitch https://docs.copilotkit.ai`"
 
-            await send_telegram_alert(f"⚙️ *Auditing & Synthesizing Pitch for:* `{target_url}`...")
+            await send_telegram_alert(f"⚙️ *Executing Autonomous Outreach Pipeline for:* `{target_url}`...\n_Auditing stack ➔ Extracting founder email ➔ Generating pitch ➔ Dispatching email..._")
             try:
-                from agents.audit import TechnicalAuditAgent
-                from agents.pitcher import ValueAddPitcherAgent
-                audit = TechnicalAuditAgent(enable_playwright=False)
-                pitcher = ValueAddPitcherAgent()
+                from workflow.graph import run_autonomous_outreach_pipeline
+                comp_name = target_url.replace("https://", "").replace("http://", "").split("/")[0]
 
-                findings = await audit.perform_audit(target_url)
-                pitch = await pitcher.generate_pitch_async(
-                    lead_name="Founder",
-                    lead_role="CTO",
-                    company_name=target_url.replace("https://", "").replace("http://", "").split("/")[0],
-                    website_url=target_url,
-                    audit_findings=findings
+                res = await run_autonomous_outreach_pipeline(
+                    target_url=target_url,
+                    company_name=comp_name,
+                    auto_send=True
                 )
 
-                preview_body = pitch["body"][:400] + ("..." if len(pitch["body"]) > 400 else "")
+                lead_name = res.get("primary_lead_name") or "Founder"
+                lead_email = res.get("primary_lead_email") or f"founder@{comp_name}"
+                pitch_subject = res.get("pitch_subject", "Technical Opportunity")
+                pitch_angle = res.get("pitch_angle", "CUSTOM_ML_AUDIT")
+                dispatch_status = res.get("email_dispatch_status", "SENT")
+                preview_body = (res.get("pitch_body") or "")[:350] + ("..." if len(res.get("pitch_body") or "") > 350 else "")
+
+                status_emoji = "🚀" if dispatch_status in ("SENT", "DRY_RUN_SENT") else "⚠️"
+
                 return (
-                    f"✍️ *Drafted Pitch for {target_url}:*\n\n"
-                    f"🎯 *Angle:* `{pitch.get('pitch_type', 'AI_ENGINEER_SOLUTION')}`\n"
-                    f"📧 *Subject:* {pitch['subject']}\n\n"
-                    f"📝 *Body Preview:*\n{preview_body}\n\n"
-                    f"⚡ *Provider:* `{pitch.get('provider_used', 'deterministic_synthesizer')}`"
+                    f"{status_emoji} *Autonomous Outreach Dispatched!*\n\n"
+                    f"🏢 *Company:* {res.get('company_name', comp_name)}\n"
+                    f"👤 *Lead:* {lead_name} (`{lead_email}`)\n"
+                    f"🎯 *Pitch Angle:* `{pitch_angle}`\n"
+                    f"📧 *Subject:* {pitch_subject}\n"
+                    f"📤 *Delivery Status:* `{dispatch_status}`\n\n"
+                    f"📝 *Pitch Body Preview:*\n{preview_body}\n\n"
+                    f"🤖 *Autopilot Active:* I am monitoring for prospect replies. I will notify you immediately with 1-tap action buttons as soon as they respond or negotiate!"
                 )
             except Exception as e:
-                return f"⚠️ Pitch generation failed: {e}"
+                return f"⚠️ Autonomous pitch pipeline encountered an error: {e}"
+
+        elif cmd == "/autopitch":
+            niche = args or "AI / SaaS"
+            await send_telegram_alert(f"🚀 *Launching Auto-Pitch Campaign for:* `{niche}`...\n_Discovering worthy prospects and dispatching outreach emails..._")
+            try:
+                from workflow.scheduler import AutonomousOutreachScheduler
+                scheduler = AutonomousOutreachScheduler()
+                dispatched = await scheduler.run_pending_outreach_job(limit=3)
+                if not dispatched:
+                    await scheduler.run_discovery_job(limit_per_source=3, auto_pitch=True)
+                    dispatched = await scheduler.run_pending_outreach_job(limit=3)
+
+                if dispatched:
+                    lines = [f"• *{d.get('company_name')}* ➔ `{d.get('lead_email')}` ({d.get('dispatch_status')})" for d in dispatched]
+                    return (
+                        f"✅ *Autonomous Campaign Batch Complete!*\n\n" +
+                        "\n".join(lines) +
+                        f"\n\n🤖 Monitoring IMAP inbox for responses. Will alert you on replies!"
+                    )
+                else:
+                    return f"✓ No new unpitched prospects found for `{niche}`."
+            except Exception as e:
+                return f"⚠️ Auto-pitch campaign error: {e}"
+
+        elif cmd == "/queue":
+            try:
+                async with AsyncSessionLocal() as session:
+                    stmt = (
+                        select(OutreachConversation, ProspectLead, ProspectCompany)
+                        .join(ProspectLead, OutreachConversation.lead_id == ProspectLead.id)
+                        .join(ProspectCompany, ProspectLead.company_id == ProspectCompany.id)
+                        .order_by(OutreachConversation.updated_at.desc())
+                        .limit(5)
+                    )
+                    res = await session.execute(stmt)
+                    items = res.all()
+
+                if not items:
+                    return "📭 No outreach conversations in CRM queue yet."
+
+                lines = []
+                for conv, lead, comp in items:
+                    lines.append(f"• *{comp.company_name}* ({lead.email}): Stage `[{conv.stage}]`")
+
+                return "📬 *Recent Outreach Queue:*\n\n" + "\n".join(lines)
+            except Exception as e:
+                return f"⚠️ Could not load queue: {e}"
 
         elif cmd == "/campaign":
             if not args:
@@ -312,6 +371,7 @@ class TelegramBotHandler:
 
         else:
             return f"❓ Unknown command `{cmd}`. Type `/help` to see available commands."
+
 
     async def poll_once(self, offset: Optional[int] = None) -> Tuple[List[Dict[str, Any]], Optional[int]]:
         """Poll Telegram getUpdates once for new messages, commands, and callback queries."""

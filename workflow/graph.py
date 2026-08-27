@@ -8,9 +8,11 @@ from agents.enrichment import LeadEnrichmentAgent
 from agents.pitcher import ValueAddPitcherAgent
 from agents.negotiation import NegotiationEngineAgent
 from agents.alerts import NotificationDispatcherAgent
+from tools.email_sender import OutboundEmailSender
 from database.connection import AsyncSessionLocal
-from database.models import ProspectCompany, OutreachConversation
+from database.models import ProspectCompany, OutreachConversation, EmailSendLog
 from sqlalchemy import select
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,7 @@ enrichment_agent = LeadEnrichmentAgent()
 pitcher_agent = ValueAddPitcherAgent()
 negotiation_agent = NegotiationEngineAgent()
 alerts_agent = NotificationDispatcherAgent()
+email_sender = OutboundEmailSender()
 
 # ----------------------------------------------------
 # LangGraph Node Definitions
@@ -125,6 +128,87 @@ async def node_pitch_generator(state: OutreachState) -> Dict[str, Any]:
         "negotiation_stage": "DRAFTED"
     }
 
+async def node_email_dispatcher(state: OutreachState) -> Dict[str, Any]:
+    """Node 4.5: Autonomous Email Dispatch for Qualified/Worthy Prospects"""
+    # If this run is handling an incoming reply, skip outbound send
+    if state.get("incoming_reply"):
+        return {
+            "email_dispatch_status": "SKIPPED_REPLY_INCOMING",
+            "is_worthy_prospect": True
+        }
+
+    recipient_email = state.get("primary_lead_email")
+    subject = state.get("pitch_subject")
+    body = state.get("pitch_body")
+    conv_id = state.get("conversation_id")
+    auto_send = state.get("auto_send", settings.auto_send_outreach)
+
+    # Check if prospect is worthy / qualified
+    is_worthy = bool(recipient_email and "@" in recipient_email and body and subject)
+
+    if not is_worthy:
+        logger.info(f"Prospect {state.get('company_name')} skipped from auto-pitch: missing lead email or pitch content.")
+        return {
+            "email_dispatch_status": "UNQUALIFIED",
+            "is_worthy_prospect": False,
+            "negotiation_stage": state.get("negotiation_stage", "DRAFTED")
+        }
+
+    if not auto_send:
+        logger.info(f"Auto-send disabled. Pitch drafted for {recipient_email} ({state.get('company_name')}).")
+        return {
+            "email_dispatch_status": "SKIPPED_MANUAL_MODE",
+            "is_worthy_prospect": True,
+            "negotiation_stage": "DRAFTED"
+        }
+
+    # Dispatch outbound email
+    sender_name = getattr(settings, "sender_name", "Technical Architecture Team")
+    res = await email_sender.send_email(
+        recipient_email=recipient_email,
+        subject=subject,
+        body_text=body,
+        conversation_id=conv_id,
+        custom_from_name=sender_name
+    )
+
+    status = res.get("status", "FAILED")
+    msg_id = res.get("message_id")
+    new_stage = "SENT" if status in ("SENT", "DRY_RUN_SENT") else "DRAFTED"
+
+    # Update CRM record & record send log
+    if conv_id:
+        try:
+            async with AsyncSessionLocal() as session:
+                stmt = select(OutreachConversation).where(OutreachConversation.id == conv_id)
+                db_res = await session.execute(stmt)
+                conv = db_res.scalar_one_or_none()
+                if conv:
+                    conv.stage = new_stage
+                    if msg_id:
+                        conv.email_thread_id = msg_id
+                    
+                    send_log = EmailSendLog(
+                        conversation_id=conv.id,
+                        sender_domain=email_sender.secondary_domain,
+                        recipient_email=recipient_email,
+                        subject=subject,
+                        status=status
+                    )
+                    session.add(send_log)
+                    await session.commit()
+        except Exception as e:
+            logger.debug(f"CRM email send log save skipped: {e}")
+
+    logger.info(f"🚀 Autonomous outreach dispatched to {recipient_email} ({state.get('company_name')}) - Status: {status}")
+
+    return {
+        "email_dispatch_status": status,
+        "email_message_id": msg_id,
+        "negotiation_stage": new_stage,
+        "is_worthy_prospect": True
+    }
+
 async def node_negotiation_handler(state: OutreachState) -> Dict[str, Any]:
     """Node 5: Conversational Reply & Bounded Negotiation"""
     incoming = state.get("incoming_reply")
@@ -150,14 +234,22 @@ async def node_negotiation_handler(state: OutreachState) -> Dict[str, Any]:
     }
 
 async def node_alert_dispatcher(state: OutreachState) -> Dict[str, Any]:
-    """Node 6: Deal Closer, Notifications & Celebrations"""
+    """Node 6: Deal Closer, Notifications & Celebrations (Silent on regular outbound drafts)"""
     conv_id = state.get("conversation_id")
     lead_id = state.get("primary_lead_id")
     company_id = state.get("company_id")
     stage = state.get("negotiation_stage", "DRAFTED")
     response_msg = state.get("negotiation_response") or state.get("pitch_body", "")
 
-    if conv_id and lead_id and company_id:
+    # Only fire Telegram alerts if there is an active incoming reply, negotiation event, HITL, or won deal
+    should_alert = (
+        state.get("incoming_reply") is not None
+        or stage in ("REPLIED", "NEGOTIATING", "COUNTER_OFFERED", "HITL_HANDOVER", "CLOSED_WON")
+        or state.get("human_override_required", False)
+        or getattr(settings, "alert_on_outbound_send", False)
+    )
+
+    if conv_id and lead_id and company_id and should_alert:
         await alerts_agent.dispatch_stage_update(
             conversation_id=conv_id,
             lead_id=lead_id,
@@ -184,6 +276,7 @@ def create_outreach_graph() -> StateGraph:
     workflow.add_node("technical_audit", node_technical_audit)
     workflow.add_node("lead_enrichment", node_lead_enrichment)
     workflow.add_node("pitch_generator", node_pitch_generator)
+    workflow.add_node("email_dispatcher", node_email_dispatcher)
     workflow.add_node("negotiation_handler", node_negotiation_handler)
     workflow.add_node("alert_dispatcher", node_alert_dispatcher)
 
@@ -194,13 +287,19 @@ def create_outreach_graph() -> StateGraph:
     workflow.add_edge("discovery", "technical_audit")
     workflow.add_edge("technical_audit", "lead_enrichment")
     workflow.add_edge("lead_enrichment", "pitch_generator")
-    workflow.add_edge("pitch_generator", "negotiation_handler")
+    workflow.add_edge("pitch_generator", "email_dispatcher")
+    workflow.add_edge("email_dispatcher", "negotiation_handler")
     workflow.add_edge("negotiation_handler", "alert_dispatcher")
     workflow.add_edge("alert_dispatcher", END)
 
     return workflow.compile()
 
-async def run_autonomous_outreach_pipeline(target_url: str, company_name: str, incoming_reply: str = None) -> OutreachState:
+async def run_autonomous_outreach_pipeline(
+    target_url: str,
+    company_name: str,
+    incoming_reply: str = None,
+    auto_send: bool = True
+) -> OutreachState:
     """Helper to execute graph synchronously."""
     app = create_outreach_graph()
     initial_state: OutreachState = {
@@ -226,7 +325,12 @@ async def run_autonomous_outreach_pipeline(target_url: str, company_name: str, i
         "agreed_rate": None,
         "human_override_required": False,
         "override_reason": None,
+        "email_dispatch_status": None,
+        "email_message_id": None,
+        "is_worthy_prospect": False,
+        "auto_send": auto_send,
         "errors": []
     }
     result = await app.ainvoke(initial_state)
     return result
+

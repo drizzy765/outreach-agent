@@ -41,7 +41,8 @@ def init():
 def run(
     url: str = typer.Option(..., "--url", "-u", help="Target website URL"),
     name: str = typer.Option(..., "--name", "-n", help="Target company name"),
-    reply: str = typer.Option(None, "--reply", "-r", help="Simulate an incoming reply from prospect")
+    reply: str = typer.Option(None, "--reply", "-r", help="Simulate an incoming reply from prospect"),
+    send: bool = typer.Option(True, "--send/--no-send", help="Autonomously dispatch outbound pitch email to qualified lead")
 ):
     """Execute end-to-end multi-agent pipeline for a prospect."""
     console.print(Panel(f"🚀 Running Autonomous Outreach Pipeline for [bold cyan]{name}[/bold cyan] ({url})", style="bold blue"))
@@ -52,7 +53,7 @@ def run(
         except Exception:
             pass
         try:
-            return await run_autonomous_outreach_pipeline(target_url=url, company_name=name, incoming_reply=reply)
+            return await run_autonomous_outreach_pipeline(target_url=url, company_name=name, incoming_reply=reply, auto_send=send)
         finally:
             try:
                 from database.connection import engine
@@ -74,7 +75,10 @@ def run(
     table.add_row("2. Audit Diagnostics", f"TTFB: {audit.get('ttfb_ms')}ms | Search Gap: {audit.get('search_gap_detected')}")
     table.add_row("3. Lead Enrichment", f"{result.get('primary_lead_name')} ({result.get('primary_lead_email')})")
     table.add_row("4. Value-Add Pitch", f"Angle: {result.get('pitch_angle')} | Subject: {result.get('pitch_subject')}")
-    table.add_row("5. Negotiation Stage", f"{result.get('negotiation_stage')}")
+    dispatch_status = result.get('email_dispatch_status', 'N/A')
+    dispatch_color = "bold green" if dispatch_status in ("SENT", "DRY_RUN_SENT") else "yellow"
+    table.add_row("5. Outbound Dispatch", f"Status: [{dispatch_color}]{dispatch_status}[/{dispatch_color}] (MsgID: {result.get('email_message_id', 'N/A')})")
+    table.add_row("6. Negotiation Stage", f"{result.get('negotiation_stage')}")
     if result.get('human_override_required'):
         table.add_row("⚠️ HITL Handover", f"REASON: {result.get('override_reason')}", style="bold red")
 
@@ -86,6 +90,7 @@ def run(
     if result.get("negotiation_response"):
         console.print("\n[bold green]Negotiation Follow-Up Response:[/bold green]")
         console.print(Panel(result.get("negotiation_response"), style="green"))
+
 
 @app.command()
 def verify_email(
@@ -334,6 +339,44 @@ def followup(
         table.add_row(f.get("company", ""), f.get("lead_email", ""), f.get("status", "FOLLOWED_UP"))
 
     console.print(table)
+
+@app.command()
+def autopitch(
+    limit: int = typer.Option(5, "--limit", "-l", help="Max number of worthy prospects to audit and pitch"),
+    discover: bool = typer.Option(True, "--discover/--no-discover", help="Run multi-source discovery first before pitching")
+):
+    """Autonomously discover worthy companies and immediately dispatch outreach pitches."""
+    console.print(Panel(f"🚀 Launching Autonomous Pitch Campaign (Limit: {limit})", style="bold blue"))
+    scheduler = AutonomousOutreachScheduler()
+
+    async def _run():
+        await init_db()
+        if discover:
+            await scheduler.run_discovery_job(limit_per_source=limit, auto_pitch=False)
+        return await scheduler.run_pending_outreach_job(limit=limit)
+
+    dispatched = asyncio.run(_run())
+
+    if not dispatched:
+        console.print("[green]✓ No pending unpitched prospects found.[/green]")
+        return
+
+    table = Table(title="Autonomous Pitch Dispatches", show_header=True, header_style="bold green")
+    table.add_column("Company", style="bold cyan")
+    table.add_column("Lead Email", style="blue")
+    table.add_column("Delivery Status", style="green")
+    table.add_column("Stage", style="magenta")
+
+    for d in dispatched:
+        table.add_row(
+            d.get("company_name", ""),
+            d.get("lead_email", ""),
+            d.get("dispatch_status", ""),
+            d.get("stage", "")
+        )
+
+    console.print(table)
+
 
 @app.command()
 def daemon(
