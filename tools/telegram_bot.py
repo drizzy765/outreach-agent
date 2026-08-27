@@ -387,8 +387,15 @@ class TelegramBotHandler:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url, params=params)
                 if resp.status_code != 200:
-                    logger.warning(f"[Telegram Poller] getUpdates failed (HTTP {resp.status_code}): {resp.text}")
+                    if resp.status_code == 409:
+                        logger.warning(
+                            "[Telegram Poller] ⚠️ Conflict (HTTP 409): Another instance of this bot is already running. "
+                            "Please terminate old python processes in PowerShell: Stop-Process -Name python -Force"
+                        )
+                    else:
+                        logger.warning(f"[Telegram Poller] getUpdates failed (HTTP {resp.status_code}): {resp.text}")
                     return [], offset
+
 
                 data = resp.json()
                 updates = data.get("result", [])

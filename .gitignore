@@ -33,3 +33,6 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+*.db
+crm.db
+

@@ -103,21 +103,27 @@ class AutonomousOutreachScheduler:
 
         return results
 
-    async def run_pending_outreach_job(self, limit: int = 5) -> List[Dict[str, Any]]:
+    async def run_pending_outreach_job(
+        self,
+        limit: int = 5,
+        fallback_prospects: Optional[List[Dict[str, Any]]] = None
+    ) -> List[Dict[str, Any]]:
         """Scan CRM for registered companies without sent outreach and autonomously audit, pitch, and dispatch emails."""
         logger.info(f"[Scheduler] Running Autonomous Pitching on Pending Prospects (Limit: {limit})...")
         from workflow.graph import run_autonomous_outreach_pipeline
 
         dispatched = []
-        async with AsyncSessionLocal() as session:
-            try:
-                # Find companies that have no conversations in SENT, REPLIED, or CLOSED stages
+        targets_to_pitch = []
+
+        # 1. Attempt querying unpitched companies from database
+        try:
+            async with AsyncSessionLocal() as session:
                 stmt = select(ProspectCompany).order_by(ProspectCompany.discovered_at.desc()).limit(limit * 3)
                 res = await session.execute(stmt)
                 companies = res.scalars().all()
 
                 for comp in companies:
-                    if len(dispatched) >= limit:
+                    if len(targets_to_pitch) >= limit:
                         break
 
                     # Check if already pitched
@@ -132,30 +138,52 @@ class AutonomousOutreachScheduler:
                     conv_res = await session.execute(conv_stmt)
                     existing_conv = conv_res.first()
 
-                    if existing_conv:
-                        continue
+                    if not existing_conv:
+                        targets_to_pitch.append({
+                            "company_id": str(comp.id),
+                            "company_name": comp.company_name,
+                            "website_url": comp.website_url
+                        })
+        except Exception as e:
+            logger.debug(f"[Scheduler] Database lookup skipped (using fallback prospects if available): {e}")
 
-                    logger.info(f"[Scheduler] Autonomously executing pipeline for {comp.company_name} ({comp.website_url})...")
-                    result = await run_autonomous_outreach_pipeline(
-                        target_url=comp.website_url,
-                        company_name=comp.company_name,
-                        auto_send=settings.auto_send_outreach
-                    )
+        # 2. If DB has no targets, use discovered fallback prospects directly
+        if not targets_to_pitch and fallback_prospects:
+            for p in fallback_prospects[:limit]:
+                targets_to_pitch.append({
+                    "company_id": None,
+                    "company_name": p.get("company_name", "Target Prospect"),
+                    "website_url": p.get("website_url", "")
+                })
 
-                    dispatched.append({
-                        "company_id": str(comp.id),
-                        "company_name": comp.company_name,
-                        "website_url": comp.website_url,
-                        "lead_email": result.get("primary_lead_email"),
-                        "dispatch_status": result.get("email_dispatch_status"),
-                        "stage": result.get("negotiation_stage")
-                    })
+        # 3. Execute outreach pipeline for each target
+        for target in targets_to_pitch:
+            url = target.get("website_url")
+            name = target.get("company_name")
+            if not url:
+                continue
 
-                    # Small polite async delay between company dispatches
-                    await asyncio.sleep(0.5)
+            try:
+                logger.info(f"[Scheduler] Autonomously executing pipeline for {name} ({url})...")
+                result = await run_autonomous_outreach_pipeline(
+                    target_url=url,
+                    company_name=name,
+                    auto_send=settings.auto_send_outreach
+                )
 
+                dispatched.append({
+                    "company_id": target.get("company_id"),
+                    "company_name": name,
+                    "website_url": url,
+                    "lead_email": result.get("primary_lead_email"),
+                    "dispatch_status": result.get("email_dispatch_status"),
+                    "stage": result.get("negotiation_stage")
+                })
             except Exception as e:
-                logger.error(f"[Scheduler] Error running pending outreach job: {e}")
+                logger.error(f"[Scheduler] Pipeline execution error for {name} ({url}): {e}")
+
+            # Polite delay between outbound sends
+            await asyncio.sleep(0.5)
 
         logger.info(f"[Scheduler] Autonomous outreach completed: dispatched {len(dispatched)} emails.")
         return dispatched
@@ -166,21 +194,25 @@ class AutonomousOutreachScheduler:
         prospects = await self.discovery_agent.discover_multi_source(limit_per_source=limit_per_source)
         if prospects:
             saved = await self.discovery_agent.register_prospects(prospects)
-            logger.info(f"[Scheduler] Registered {len(saved)} new prospects to CRM.")
+            logger.info(f"[Scheduler] Discovered {len(prospects)} prospects (Registered {len(saved)} to CRM).")
 
             # Autonomously audit, pitch, and dispatch to top worthy candidates
             dispatched = []
             if auto_pitch and settings.auto_send_outreach:
-                dispatched = await self.run_pending_outreach_job(limit=settings.max_auto_pitches_per_discovery_cycle)
+                dispatched = await self.run_pending_outreach_job(
+                    limit=settings.max_auto_pitches_per_discovery_cycle,
+                    fallback_prospects=prospects
+                )
 
             if getattr(settings, "alert_on_outbound_send", False):
                 await send_telegram_alert(
                     f"🔍 *Scheduled Discovery & Outreach Completed:*\n"
-                    f"• Found & registered *{len(saved)}* new companies to CRM.\n"
+                    f"• Found *{len(prospects)}* new companies.\n"
                     f"• Autonomously pitched & dispatched outreach to *{len(dispatched)}* qualified leads."
                 )
             return prospects
         return []
+
 
     async def run_followup_sequencing_job(self, days_threshold: int = 3) -> List[Dict[str, Any]]:
         """Scan for stale unreplied pitches and schedule follow-up sequence bump."""
@@ -303,27 +335,28 @@ class AutonomousOutreachScheduler:
 
             # 2. Inbound IMAP Check
             if now - last_inbox_check >= inbox_delta:
+                last_inbox_check = now
                 try:
                     await self.check_inbound_replies_job()
-                    last_inbox_check = now
                 except Exception as e:
                     logger.error(f"[Scheduler] Inbound check error: {e}")
 
             # 3. Follow-up Sequencing
             if now - last_followup_run >= followup_delta:
+                last_followup_run = now
                 try:
                     await self.run_followup_sequencing_job()
-                    last_followup_run = now
                 except Exception as e:
                     logger.error(f"[Scheduler] Follow-up job error: {e}")
 
             # 4. Multi-Source Discovery
             if now - last_discovery_run >= discovery_delta:
+                last_discovery_run = now
                 try:
                     await self.run_discovery_job(limit_per_source=5)
-                    last_discovery_run = now
                 except Exception as e:
                     logger.error(f"[Scheduler] Discovery job error: {e}")
+
 
             await asyncio.sleep(2.0)
 
